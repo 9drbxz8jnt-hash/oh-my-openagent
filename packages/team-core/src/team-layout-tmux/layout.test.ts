@@ -1,6 +1,6 @@
 /// <reference types="bun-types" />
 
-import { beforeEach, describe, expect, mock, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 
 import { canVisualize, createTeamLayout, removeTeamLayout, type TeamLayoutCleanupTarget, type TeamLayoutDeps } from "./layout"
 
@@ -9,6 +9,8 @@ let nextPaneNumber = 1
 let displaySessionId = "$7"
 let displaySuccess = true
 const panesByWindow = new Map<string, string[]>()
+const originalServerPassword = process.env.OPENCODE_SERVER_PASSWORD
+const originalServerUsername = process.env.OPENCODE_SERVER_USERNAME
 
 function createTmuxCommandResult(output: string, success = true) {
   return {
@@ -122,6 +124,15 @@ describe("team-layout-tmux", () => {
     runTmuxCommandMock.mockImplementation(defaultRunTmuxCommand)
     process.env.TMUX = "/tmp/tmux-1"
     process.env.TMUX_PANE = "%42"
+    delete process.env.OPENCODE_SERVER_PASSWORD
+    delete process.env.OPENCODE_SERVER_USERNAME
+  })
+
+  afterEach(() => {
+    if (originalServerPassword === undefined) delete process.env.OPENCODE_SERVER_PASSWORD
+    else process.env.OPENCODE_SERVER_PASSWORD = originalServerPassword
+    if (originalServerUsername === undefined) delete process.env.OPENCODE_SERVER_USERNAME
+    else process.env.OPENCODE_SERVER_USERNAME = originalServerUsername
   })
 
   test("returns null and makes no tmux calls when visualization unavailable", async () => {

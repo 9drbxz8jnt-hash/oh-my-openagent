@@ -195,11 +195,11 @@ describe("resolveSkillContentAsync", () => {
 	})
 
 	it("resolves nested skill by unique short name async", async () => {
-		// given: a discovered nested skill toolkit/systematic-debugging
-		createNestedSkill(testConfigDir, "toolkit", "systematic-debugging", "Short name test content")
+		// given: a discovered nested skill with a test-only short name
+		createNestedSkill(testConfigDir, "toolkit", "omo-test-short-skill", "Short name test content")
 
 		// when: resolving by short name
-		const result = await resolveSkillContentAsync("systematic-debugging")
+		const result = await resolveSkillContentAsync("omo-test-short-skill", { directory: testConfigDir })
 
 		// then: finds the nested skill
 		expect(result).not.toBeNull()
@@ -235,11 +235,11 @@ describe("resolveSkillContentAsync", () => {
 	})
 
 	it("is case-insensitive for short name matching async", async () => {
-		// given: a nested skill with lowercase name
-		createNestedSkill(testConfigDir, "toolkit", "systematic-debugging", "case insensitive match")
+		// given: a nested skill with lowercase test-only name
+		createNestedSkill(testConfigDir, "toolkit", "omo-test-case-skill", "case insensitive match")
 
 		// when: resolving by uppercase short name
-		const result = await resolveSkillContentAsync("Systematic-Debugging")
+		const result = await resolveSkillContentAsync("Omo-Test-Case-Skill", { directory: testConfigDir })
 
 		// then: finds it case-insensitively
 		expect(result).not.toBeNull()
@@ -440,15 +440,15 @@ describe("resolveMultipleSkillsAsync", () => {
 
 	it("resolves nested skill by unique short name in mixed batch", async () => {
 		// given: nested skill and builtin skill
-		createNestedSkill(testConfigDir, "toolkit", "systematic-debugging", "short name resolved")
+		createNestedSkill(testConfigDir, "toolkit", "omo-test-batch-skill", "short name resolved")
 
 		// when: mixing short name with full builtin name
-		const result = await resolveMultipleSkillsAsync(["systematic-debugging", "playwright"])
+		const result = await resolveMultipleSkillsAsync(["omo-test-batch-skill", "playwright"], { directory: testConfigDir })
 
 		// then: both resolved
 		expect(result.resolved.size).toBe(2)
 		expect(result.notFound).toEqual([])
-		expect(result.resolved.get("systematic-debugging")).toContain("short name resolved")
+		expect(result.resolved.get("omo-test-batch-skill")).toContain("short name resolved")
 		expect(result.resolved.get("playwright")).toContain("Playwright Browser Automation")
 	})
 
