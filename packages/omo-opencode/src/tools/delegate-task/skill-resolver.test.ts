@@ -37,20 +37,20 @@ describe("resolveSkillContent — nativeSkills integration", () => {
     expect(result).toEqual({ content: undefined, contents: [], error: null })
   })
 
-  it("#given a skill that lives only in nativeSkills #when resolved #then returns its content", async () => {
-    // given
-    const native = makeNativeSkill(
-      "test-driven-development",
-      "TDD discipline",
-      "## Red-Green-Refactor\nWrite a failing test first.",
-    )
-    const nativeSkills = makeNativeAccessor([native])
+	it("#given a skill that lives only in nativeSkills #when resolved #then returns its content", async () => {
+		// given
+		const native = makeNativeSkill(
+			"omo-test-native-only-skill",
+			"TDD discipline",
+			"## Red-Green-Refactor\nWrite a failing test first.",
+		)
+		const nativeSkills = makeNativeAccessor([native])
 
-    // when
-    const result = await resolveSkillContent(["test-driven-development"], {
-      nativeSkills,
-      directory: TEST_DIR,
-    })
+		// when
+		const result = await resolveSkillContent(["omo-test-native-only-skill"], {
+			nativeSkills,
+			directory: TEST_DIR,
+		})
 
     // then
     expect(result.error).toBeNull()
@@ -205,19 +205,19 @@ describe("resolveSkillContent — nativeSkills integration", () => {
     expect(result.error).not.toContain("Prometheus")
   })
 
-  it("#given a namespaced OMO skill #when requested by unique short name with different case #then resolves it", async () => {
-    // given
-    const skillsDir = join(TEST_DIR, ".opencode", "skills", "toolkit", "systematic-debugging")
-    mkdirSync(skillsDir, { recursive: true })
-    writeFileSync(
-      join(skillsDir, "SKILL.md"),
-      "---\nname: toolkit/systematic-debugging\ndescription: Systematic debugging\n---\nSHORT_NAME_BODY",
-    )
+	it("#given a namespaced OMO skill #when requested by unique short name with different case #then resolves it", async () => {
+		// given
+		const skillsDir = join(TEST_DIR, ".opencode", "skills", "toolkit", "omo-test-resolver-skill")
+		mkdirSync(skillsDir, { recursive: true })
+		writeFileSync(
+			join(skillsDir, "SKILL.md"),
+			"---\nname: toolkit/omo-test-resolver-skill\ndescription: Systematic debugging\n---\nSHORT_NAME_BODY",
+		)
 
-    // when
-    const result = await resolveSkillContent(["SYSTEMATIC-DEBUGGING"], {
-      directory: TEST_DIR,
-    })
+		// when
+		const result = await resolveSkillContent(["OMO-TEST-RESOLVER-SKILL"], {
+			directory: TEST_DIR,
+		})
 
     // then
     expect(result.error).toBeNull()
