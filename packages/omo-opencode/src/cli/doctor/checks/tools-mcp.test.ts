@@ -26,6 +26,7 @@ describe("getUserMcpInfo", () => {
   it("loads valid project MCP servers", async () => {
     // given
     const workspaceDirectory = createTemporaryDirectory("omo-tools-mcp-valid-")
+    const homeDirectory = createTemporaryDirectory("omo-tools-mcp-home-")
     process.chdir(workspaceDirectory)
     writeFileSync(
       join(workspaceDirectory, ".mcp.json"),
@@ -36,7 +37,7 @@ describe("getUserMcpInfo", () => {
     const { getUserMcpInfo } = await import(`./tools-mcp?t=${Date.now()}-valid`)
 
     // when
-    const servers = getUserMcpInfo()
+    const servers = getUserMcpInfo({ homeDirectory, directory: workspaceDirectory })
 
     // then
     expect(servers).toEqual([
@@ -53,13 +54,14 @@ describe("getUserMcpInfo", () => {
   it("skips malformed MCP config files", async () => {
     // given
     const workspaceDirectory = createTemporaryDirectory("omo-tools-mcp-malformed-")
+    const homeDirectory = createTemporaryDirectory("omo-tools-mcp-home-")
     process.chdir(workspaceDirectory)
     writeFileSync(join(workspaceDirectory, ".mcp.json"), "{", "utf-8")
 
     const { getUserMcpInfo } = await import(`./tools-mcp?t=${Date.now()}-malformed`)
 
     // when
-    const servers = getUserMcpInfo()
+    const servers = getUserMcpInfo({ homeDirectory, directory: workspaceDirectory })
 
     // then
     expect(servers).toEqual([])
@@ -68,6 +70,7 @@ describe("getUserMcpInfo", () => {
   it("marks non-object MCP server entries invalid", async () => {
     // given
     const workspaceDirectory = createTemporaryDirectory("omo-tools-mcp-invalid-")
+    const homeDirectory = createTemporaryDirectory("omo-tools-mcp-home-")
     mkdirSync(join(workspaceDirectory, ".claude"), { recursive: true })
     process.chdir(workspaceDirectory)
     writeFileSync(
@@ -79,7 +82,7 @@ describe("getUserMcpInfo", () => {
     const { getUserMcpInfo } = await import(`./tools-mcp?t=${Date.now()}-invalid`)
 
     // when
-    const servers = getUserMcpInfo()
+    const servers = getUserMcpInfo({ homeDirectory, directory: workspaceDirectory })
 
     // then
     expect(servers).toEqual([

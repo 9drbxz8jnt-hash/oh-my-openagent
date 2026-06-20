@@ -11,18 +11,26 @@ interface McpConfigShape {
   mcpServers?: Record<string, unknown>
 }
 
-function getMcpConfigPaths(): string[] {
+type UserMcpInfoOptions = {
+  homeDirectory?: string
+  directory?: string
+}
+
+function getMcpConfigPaths(options: UserMcpInfoOptions = {}): string[] {
+  const homeDirectory = options.homeDirectory ?? homedir()
+  const directory = options.directory ?? process.cwd()
+
   return [
-    join(homedir(), ".claude", ".mcp.json"),
-    join(process.cwd(), ".mcp.json"),
-    join(process.cwd(), ".claude", ".mcp.json"),
+    join(homeDirectory, ".claude", ".mcp.json"),
+    join(directory, ".mcp.json"),
+    join(directory, ".claude", ".mcp.json"),
   ]
 }
 
-function loadUserMcpConfig(): Record<string, unknown> {
+function loadUserMcpConfig(options: UserMcpInfoOptions = {}): Record<string, unknown> {
   const servers: Record<string, unknown> = {}
 
-  for (const configPath of getMcpConfigPaths()) {
+  for (const configPath of getMcpConfigPaths(options)) {
     if (!existsSync(configPath)) continue
 
     try {
@@ -52,8 +60,8 @@ export function getBuiltinMcpInfo(): McpServerInfo[] {
   }))
 }
 
-export function getUserMcpInfo(): McpServerInfo[] {
-  return Object.entries(loadUserMcpConfig()).map(([serverId, value]) => {
+export function getUserMcpInfo(options: UserMcpInfoOptions = {}): McpServerInfo[] {
+  return Object.entries(loadUserMcpConfig(options)).map(([serverId, value]) => {
     const valid = typeof value === "object" && value !== null
     return {
       id: serverId,
