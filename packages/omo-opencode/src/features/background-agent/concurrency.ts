@@ -1,4 +1,10 @@
 import type { BackgroundTaskConfig } from "../../config/schema"
+import { log } from "../../shared"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
+
+interface ConcurrencyManagerOptions {
+  runtimeMetrics?: RuntimeMetricsCollector
+}
 
 /**
  * Queue entry with settled-flag pattern to prevent double-resolution.
@@ -17,9 +23,11 @@ export class ConcurrencyManager {
   private config?: BackgroundTaskConfig
   private counts: Map<string, number> = new Map()
   private queues: Map<string, QueueEntry[]> = new Map()
+  private runtimeMetrics?: RuntimeMetricsCollector
 
-  constructor(config?: BackgroundTaskConfig) {
+  constructor(config?: BackgroundTaskConfig, options: ConcurrencyManagerOptions = {}) {
     this.config = config
+    this.runtimeMetrics = options.runtimeMetrics
   }
 
   getConcurrencyLimit(model: string): number {
@@ -81,6 +89,7 @@ export class ConcurrencyManager {
 
       queue.push(entry)
       this.queues.set(key, queue)
+      this.recordQueueDepth("enqueue", taskId)
     })
   }
 
@@ -97,8 +106,10 @@ export class ConcurrencyManager {
       if (!next.settled) {
         // Hand off the slot to this waiter (count stays the same)
         next.resolve()
+        this.recordQueueDepth("dequeue", next.taskId)
         return
       }
+      this.recordQueueDepth("settled-waiter-skipped", next.taskId)
     }
 
     // No handoff occurred - decrement the count to free the slot
@@ -127,6 +138,7 @@ export class ConcurrencyManager {
     if (queue.length === 0) {
       this.queues.delete(key)
     }
+    this.recordQueueDepth("cancel-waiter", taskId)
     return true
   }
 
@@ -144,6 +156,7 @@ export class ConcurrencyManager {
         }
       }
       this.queues.delete(key)
+      this.recordQueueDepth("cancel-waiters")
     }
   }
 
@@ -157,6 +170,7 @@ export class ConcurrencyManager {
     }
     this.counts.clear()
     this.queues.clear()
+    this.recordQueueDepth("clear")
   }
 
   /**
@@ -171,5 +185,25 @@ export class ConcurrencyManager {
    */
   getQueueLength(model: string): number {
     return this.queues.get(model)?.length ?? 0
+  }
+
+  private getTotalQueuedWaiters(): number {
+    let total = 0
+    for (const queue of this.queues.values()) {
+      total += queue.filter((entry) => !entry.settled).length
+    }
+    return total
+  }
+
+  private recordQueueDepth(reason: string, taskId?: string): void {
+    if (!this.runtimeMetrics) return
+    const depth = this.getTotalQueuedWaiters()
+    this.runtimeMetrics.setQueueDepth(depth)
+    log("[runtime-metrics] background_queue_depth updated", {
+      metric: "background_queue_depth",
+      depth,
+      taskId,
+      reason,
+    })
   }
 }

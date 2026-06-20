@@ -19,6 +19,7 @@ import { createConfigHandler } from "./plugin-handlers"
 import type { ModelCacheState } from "./plugin-state"
 import { log } from "./shared"
 import type { LifecycleMemoryCandidateRecorder } from "./shared/lifecycle-memory-candidate"
+import type { RuntimeMetricsCollector } from "./shared/runtime-metrics"
 import { markServerRunningInProcess } from "./shared/tmux/tmux-utils/server-health"
 
 type CreateManagersDeps = {
@@ -65,6 +66,7 @@ export function createManagers(args: {
   backgroundNotificationHookEnabled: boolean
   runtimeSkillSourceUrl?: string
   lifecycleMemoryRecorder?: LifecycleMemoryCandidateRecorder
+  runtimeMetrics?: RuntimeMetricsCollector
   deps?: Partial<CreateManagersDeps>
 }): Managers {
   const {
@@ -75,6 +77,7 @@ export function createManagers(args: {
     backgroundNotificationHookEnabled,
     runtimeSkillSourceUrl,
     lifecycleMemoryRecorder,
+    runtimeMetrics,
   } = args
   const deps = { ...defaultCreateManagersDeps, ...args.deps }
 
@@ -124,52 +127,55 @@ export function createManagers(args: {
     shutdown: async () => {
       tuiStateMirror?.stop()
       await cleanupTeamModeRuns().catch((error) => {
+        recordManagerCleanupFailure(runtimeMetrics, "team-mode-process-shutdown-cleanup", error)
         log("[create-managers] team-mode cleanup error during process shutdown:", error)
       })
       await tmuxSessionManager.cleanup().catch((error) => {
+        recordManagerCleanupFailure(runtimeMetrics, "tmux-process-shutdown-cleanup", error)
         log("[create-managers] tmux cleanup error during process shutdown:", error)
       })
       await monitorManager?.shutdown().catch((error) => {
+        recordManagerCleanupFailure(runtimeMetrics, "monitor-process-shutdown-cleanup", error)
         log("[create-managers] monitor cleanup error during process shutdown:", error)
       })
     },
-  })
+  }, { runtimeMetrics })
 
   backgroundManager = new deps.BackgroundManagerClass({
     pluginContext: ctx,
     config: pluginConfig.background_task,
     tmuxConfig,
     onSubagentSessionCreated: async (event: SubagentSessionCreatedEvent) => {
-        log("[create-managers] onSubagentSessionCreated callback received", {
-          sessionID: event.sessionID,
-          parentID: event.parentID,
-          title: event.title,
-        })
+      log("[create-managers] onSubagentSessionCreated callback received", {
+        sessionID: event.sessionID,
+        parentID: event.parentID,
+        title: event.title,
+      })
 
-        await tmuxSessionManager.onSessionCreated({
-          type: "session.created",
-          properties: {
-            info: {
-              id: event.sessionID,
-              parentID: event.parentID,
-              title: event.title,
-            },
+      await tmuxSessionManager.onSessionCreated({
+        type: "session.created",
+        properties: {
+          info: {
+            id: event.sessionID,
+            parentID: event.parentID,
+            title: event.title,
+          },
+        },
+      })
+
+      if (pluginConfig.openclaw) {
+        await openclawRuntimeDispatch.dispatchOpenClawEvent({
+          config: pluginConfig.openclaw,
+          rawEvent: "session.created",
+          context: {
+            sessionId: event.sessionID,
+            projectPath: ctx.directory,
+            tmuxPaneId: tmuxSessionManager.getTrackedPaneId?.(event.sessionID) ?? process.env.TMUX_PANE,
           },
         })
+      }
 
-        if (pluginConfig.openclaw) {
-          await openclawRuntimeDispatch.dispatchOpenClawEvent({
-            config: pluginConfig.openclaw,
-            rawEvent: "session.created",
-            context: {
-              sessionId: event.sessionID,
-              projectPath: ctx.directory,
-              tmuxPaneId: tmuxSessionManager.getTrackedPaneId?.(event.sessionID) ?? process.env.TMUX_PANE,
-            },
-          })
-        }
-
-        log("[create-managers] onSubagentSessionCreated callback completed")
+      log("[create-managers] onSubagentSessionCreated callback completed")
     },
     onSubagentSessionDeleted: async (event: { sessionID: string }) => {
       log("[create-managers] onSubagentSessionDeleted callback received", {
@@ -200,6 +206,7 @@ export function createManagers(args: {
     enableParentSessionNotifications: backgroundNotificationHookEnabled,
     modelFallbackControllerAccessor,
     lifecycleMemoryRecorder,
+    runtimeMetrics,
   })
 
   if (pluginConfig.tui?.sidebar?.enabled !== false) {
@@ -230,4 +237,18 @@ export function createManagers(args: {
     tuiStateMirror,
     monitorManager,
   }
+}
+
+function recordManagerCleanupFailure(
+  runtimeMetrics: RuntimeMetricsCollector | undefined,
+  reason: string,
+  error: unknown,
+): void {
+  if (!runtimeMetrics) return
+  runtimeMetrics.incrementCounter("cleanup_failures")
+  log("[runtime-metrics] cleanup_failures incremented", {
+    metric: "cleanup_failures",
+    reason,
+    error: error instanceof Error ? error.message : String(error),
+  })
 }

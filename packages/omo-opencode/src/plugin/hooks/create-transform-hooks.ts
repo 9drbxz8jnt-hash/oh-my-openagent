@@ -17,6 +17,7 @@ import {
   createContextInjectorMessagesTransformHook,
 } from "../../features/context-injector"
 import type { WorkspaceMemoryReader } from "../../features/context-injector"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
 import { safeCreateHook } from "../../shared/safe-create-hook"
 
 export type TransformHooks = {
@@ -37,8 +38,9 @@ export function createTransformHooks(args: {
   ralphLoop?: RalphLoopHook | null
   monitorManager?: MonitorManager
   workspaceMemoryReader?: WorkspaceMemoryReader
+  runtimeMetrics?: RuntimeMetricsCollector
 }): TransformHooks {
-  const { ctx, pluginConfig, isHookEnabled, ralphLoop, monitorManager, workspaceMemoryReader } = args
+  const { ctx, pluginConfig, isHookEnabled, ralphLoop, monitorManager, workspaceMemoryReader, runtimeMetrics } = args
   const safeHookEnabled = args.safeHookEnabled ?? true
 
   const claudeCodeHooks = isHookEnabled("claude-code-hooks")
@@ -77,6 +79,7 @@ export function createTransformHooks(args: {
       contextCollector,
       findProjectRoot(ctx.directory) ?? ctx.directory,
       workspaceMemoryReader,
+      runtimeMetrics,
     )
 
   const teamModeConfig = pluginConfig.team_mode

@@ -12,8 +12,10 @@ type PromptAsyncArgs = Parameters<OpencodeClient["session"]["promptAsync"]>[0]
 type SessionMessagesArgs = Parameters<OpencodeClient["session"]["messages"]>[0]
 type PromptRetryClient = Parameters<typeof promptWithModelSuggestionRetry>[0]
 type PromptRetryArgs = Parameters<typeof promptWithModelSuggestionRetry>[1]
+type PromptRetryOptions = NonNullable<Parameters<typeof promptWithModelSuggestionRetry>[2]>
 type PromptSyncRetryClient = Parameters<typeof promptSyncWithModelSuggestionRetry>[0]
 type PromptSyncRetryArgs = Parameters<typeof promptSyncWithModelSuggestionRetry>[1]
+type PromptSyncRetryOptions = NonNullable<Parameters<typeof promptSyncWithModelSuggestionRetry>[2]>
 
 export function routeSessionPrompt(args: PromptAsyncArgs, directory: string): PromptAsyncArgs {
   return {
@@ -86,16 +88,32 @@ export function promptWithRetryInDirectory(
   client: PromptRetryClient,
   args: PromptRetryArgs,
   directory: string,
+  options: PromptRetryOptions = {},
 ): Promise<void> {
-  return promptWithModelSuggestionRetry(client, routePromptRetry(args, directory), { queueBehavior: "defer" })
+  return promptWithModelSuggestionRetry(
+    client,
+    routePromptRetry(args, directory),
+    {
+      ...options,
+      queueBehavior: options.queueBehavior ?? "defer",
+    },
+  )
 }
 
 export function promptSyncWithRetryInDirectory(
   client: PromptSyncRetryClient,
   args: PromptSyncRetryArgs,
   directory: string,
+  options: PromptSyncRetryOptions = {},
 ): Promise<void> {
-  return promptSyncWithModelSuggestionRetry(client, routePromptSyncRetry(args, directory), { queueBehavior: "defer" })
+  return promptSyncWithModelSuggestionRetry(
+    client,
+    routePromptSyncRetry(args, directory),
+    {
+      ...options,
+      queueBehavior: options.queueBehavior ?? "defer",
+    },
+  )
 }
 
 export function messagesInDirectory(

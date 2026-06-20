@@ -5,6 +5,7 @@ import type { MonitorManager } from "../../features/monitor"
 import type { ModelFallbackControllerAccessor } from "../../hooks/model-fallback"
 import type { PluginContext } from "../types"
 import type { ModelCacheState } from "../../plugin-state"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
 
 import { createSessionHooks } from "./create-session-hooks"
 import { createToolGuardHooks } from "./create-tool-guard-hooks"
@@ -18,10 +19,11 @@ export function createCoreHooks(args: {
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   monitorManager?: MonitorManager
   workspaceMemoryReader?: WorkspaceMemoryReader
+  runtimeMetrics?: RuntimeMetricsCollector
   isHookEnabled: (hookName: HookName) => boolean
   safeHookEnabled: boolean
 }) {
-  const { ctx, pluginConfig, modelCacheState, backgroundManager, modelFallbackControllerAccessor, monitorManager, workspaceMemoryReader, isHookEnabled, safeHookEnabled } = args
+  const { ctx, pluginConfig, modelCacheState, backgroundManager, modelFallbackControllerAccessor, monitorManager, workspaceMemoryReader, runtimeMetrics, isHookEnabled, safeHookEnabled } = args
 
   const session = createSessionHooks({
     ctx,
@@ -49,6 +51,7 @@ export function createCoreHooks(args: {
     ralphLoop: session.ralphLoop,
     monitorManager,
     workspaceMemoryReader,
+    runtimeMetrics,
   })
 
   return {

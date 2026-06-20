@@ -1,4 +1,5 @@
 import { log } from "../../shared"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
 
 type ProcessCleanupSignal = NodeJS.Signals | "beforeExit" | "exit"
 type ProcessCleanupErrorEvent = "uncaughtException" | "unhandledRejection"
@@ -215,7 +216,12 @@ interface CleanupTarget {
   shutdown(): void | Promise<void>
 }
 
+interface ProcessCleanupOptions {
+  runtimeMetrics?: RuntimeMetricsCollector
+}
+
 const cleanupManagers = new Set<CleanupTarget>()
+const cleanupManagerMetrics = new Map<CleanupTarget, RuntimeMetricsCollector>()
 let cleanupRegistered = false
 const cleanupSignalHandlers = new Map<ProcessCleanupSignal, () => void>()
 const cleanupErrorHandlers = new Map<ProcessCleanupErrorEvent, (error: unknown) => void>()
@@ -226,8 +232,11 @@ export function __getProcessCleanupSignalListenerForTesting(
   return cleanupSignalHandlers.get(signal)
 }
 
-export function registerManagerForCleanup(manager: CleanupTarget): void {
+export function registerManagerForCleanup(manager: CleanupTarget, options: ProcessCleanupOptions = {}): void {
   cleanupManagers.add(manager)
+  if (options.runtimeMetrics) {
+    cleanupManagerMetrics.set(manager, options.runtimeMetrics)
+  }
 
   if (cleanupRegistered) return
   cleanupRegistered = true
@@ -243,6 +252,7 @@ export function registerManagerForCleanup(manager: CleanupTarget): void {
           Promise.resolve(m.shutdown()).catch((error) => {
             // Skip harmless stdio EPIPE during shutdown — see issue #3772.
             if (isHarmlessShutdownError(error)) return
+            recordCleanupFailure(cleanupManagerMetrics.get(m), "async-shutdown-handler-failure", error)
             log("[background-agent] Error during async shutdown cleanup:", error)
           })
         )
@@ -253,6 +263,7 @@ export function registerManagerForCleanup(manager: CleanupTarget): void {
         } else if (harmless) {
           continue
         }
+        recordCleanupFailure(cleanupManagerMetrics.get(m), "sync-shutdown-handler-failure", error)
         log("[background-agent] Error during shutdown cleanup:", error)
       }
     }
@@ -291,6 +302,7 @@ export function registerManagerForCleanup(manager: CleanupTarget): void {
 
 export function unregisterManagerForCleanup(manager: CleanupTarget): void {
   cleanupManagers.delete(manager)
+  cleanupManagerMetrics.delete(manager)
 
   if (cleanupManagers.size > 0) return
 
@@ -305,11 +317,26 @@ export function unregisterManagerForCleanup(manager: CleanupTarget): void {
   cleanupRegistered = false
 }
 
+function recordCleanupFailure(
+  runtimeMetrics: RuntimeMetricsCollector | undefined,
+  reason: string,
+  error: unknown,
+): void {
+  if (!runtimeMetrics) return
+  runtimeMetrics.incrementCounter("cleanup_failures")
+  log("[runtime-metrics] cleanup_failures incremented", {
+    metric: "cleanup_failures",
+    reason,
+    error: describeProcessCleanupError(error),
+  })
+}
+
 /** @internal - test-only reset for module-level singleton state */
 export function _resetForTesting(): void {
   for (const manager of [...cleanupManagers]) {
     cleanupManagers.delete(manager)
   }
+  cleanupManagerMetrics.clear()
   for (const [signal, listener] of cleanupSignalHandlers.entries()) {
     process.off(signal, listener)
   }

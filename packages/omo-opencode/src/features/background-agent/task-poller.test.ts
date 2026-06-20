@@ -1,14 +1,21 @@
-declare const require: (name: string) => any
-const { describe, it, expect, mock, spyOn, beforeEach, afterEach } = require("bun:test")
+import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from "bun:test"
 
+import { createRuntimeMetricsCollector } from "../../shared/runtime-metrics"
 import { checkAndInterruptStaleTasks, pruneStaleTasksAndNotifications } from "./task-poller"
 import type { BackgroundTask } from "./types"
+
+type SessionAbortInput = { path: { id: string } }
+type SessionAbortResult = void | { error: { message: string } }
+type SessionGetResult = {
+  data?: { id: string }
+  error?: { message: string; status?: number }
+}
 
 describe("checkAndInterruptStaleTasks", () => {
   const mockClient = {
     session: {
-      abort: mock(() => Promise.resolve()),
-      get: mock(() => Promise.resolve({ data: { id: "ses-1" } })),
+      abort: mock((_input?: SessionAbortInput): Promise<SessionAbortResult> => Promise.resolve()),
+      get: mock((): Promise<SessionGetResult> => Promise.resolve({ data: { id: "ses-1" } })),
     },
   }
   const mockConcurrencyManager = {
@@ -61,9 +68,9 @@ describe("checkAndInterruptStaleTasks", () => {
     Date.now = originalDateNow
   })
 
-
   it("should interrupt tasks with lastUpdate exceeding stale timeout", async () => {
     //#given
+    const metrics = createRuntimeMetricsCollector()
     const task = createRunningTask({
       progress: {
         toolCalls: 1,
@@ -78,11 +85,13 @@ describe("checkAndInterruptStaleTasks", () => {
       config: { staleTimeoutMs: 180_000 },
       concurrencyManager: mockConcurrencyManager as never,
       notifyParentSession: mockNotify,
+      runtimeMetrics: metrics,
     })
 
     //#then
     expect(task.status).toBe("cancelled")
     expect(task.error).toContain("Stale timeout")
+    expect(metrics.getMetric("runtime_timeout_hits")).toBe(1)
   })
 
   it("should NOT interrupt tasks with recent lastUpdate", async () => {
@@ -182,6 +191,7 @@ describe("checkAndInterruptStaleTasks", () => {
 
   it("should keep never-updated task running when stale abort returns SDK error", async () => {
     //#given
+    const metrics = createRuntimeMetricsCollector()
     const task = createRunningTask({
       startedAt: new Date(Date.now() - 15 * 60 * 1000),
       progress: undefined,
@@ -199,6 +209,7 @@ describe("checkAndInterruptStaleTasks", () => {
       concurrencyManager: { release: releaseMock } as never,
       notifyParentSession: mockNotify,
       onTaskInterrupted,
+      runtimeMetrics: metrics,
     })
 
     //#then
@@ -208,6 +219,7 @@ describe("checkAndInterruptStaleTasks", () => {
     expect(releaseMock).not.toHaveBeenCalled()
     expect(onTaskInterrupted).not.toHaveBeenCalled()
     expect(mockNotify).not.toHaveBeenCalled()
+    expect(metrics.getMetric("runtime_timeout_hits")).toBe(0)
   })
 
   it("should await abort before resolving for no-progress stale interruption", async () => {
@@ -390,9 +402,13 @@ describe("checkAndInterruptStaleTasks", () => {
         lastUpdate: new Date(Date.now() - 900_000),
       },
     })
-    mockClient.session.abort.mockImplementation(({ path }: { path: { id: string } }) => {
-      abortSessionIDs.push(path.id)
-      return path.id === "ses-stale-a" ? firstAbort.promise : secondAbort.promise
+    mockClient.session.abort.mockImplementation((input?: SessionAbortInput) => {
+      const sessionId = input?.path.id
+      if (sessionId === undefined) {
+        throw new Error("session abort path id is required")
+      }
+      abortSessionIDs.push(sessionId)
+      return sessionId === "ses-stale-a" ? firstAbort.promise : secondAbort.promise
     })
 
     //#when
@@ -1017,6 +1033,7 @@ describe("pruneStaleTasksAndNotifications", () => {
 
   it("#given running task with stale progress #when lastUpdate exceeds TTL #then should prune", () => {
     //#given
+    const metrics = createRuntimeMetricsCollector()
     const tasks = new Map<string, BackgroundTask>()
     const staleTask: BackgroundTask = {
       id: "stale-task",
@@ -1042,10 +1059,12 @@ describe("pruneStaleTasksAndNotifications", () => {
       tasks,
       notifications,
       onTaskPruned: (taskId) => pruned.push(taskId),
+      runtimeMetrics: metrics,
     })
 
     //#then
     expect(pruned).toContain("stale-task")
+    expect(metrics.getMetric("runtime_timeout_hits")).toBe(1)
   })
 
   it("#given running task with stale progress and active session #when lastUpdate exceeds TTL #then should NOT prune", () => {
@@ -1149,9 +1168,9 @@ describe("pruneStaleTasksAndNotifications", () => {
     const tasks = new Map<string, BackgroundTask>()
     const task: BackgroundTask = {
       id: "team-task",
-      sessionID: "ses-team-1",
-      parentSessionID: "parent",
-      parentMessageID: "msg",
+      sessionId: "ses-team-1",
+      parentSessionId: "parent",
+      parentMessageId: "msg",
       teamRunId: "team-run-1",
       description: "team member",
       prompt: "team member",

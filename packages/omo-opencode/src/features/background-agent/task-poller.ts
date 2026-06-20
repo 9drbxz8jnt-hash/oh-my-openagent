@@ -3,6 +3,7 @@ import { CONFIG_BASENAME } from "../../shared/plugin-identity"
 
 import type { BackgroundTaskConfig } from "../../config/schema"
 import type { BackgroundTask } from "./types"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
 import type { ConcurrencyManager } from "./concurrency"
 import type { OpencodeClient } from "./opencode-client"
 
@@ -19,7 +20,10 @@ import { removeTaskToastTracking } from "./remove-task-toast-tracking"
 import { checkSessionExistence, MIN_SESSION_GONE_POLLS } from "./session-existence"
 
 import { isActiveSessionStatus } from "./session-status-classifier"
-import { getSessionActivityFromClient, type SessionActivityResolver } from "./session-activity"
+import {
+  getSessionActivityFromClient,
+  type SessionActivityResolver,
+} from "./session-activity"
 import { refreshTaskActivityFromSession } from "./task-activity-refresh"
 
 const TERMINAL_TASK_STATUSES = new Set<BackgroundTask["status"]>([
@@ -35,6 +39,7 @@ export function pruneStaleTasksAndNotifications(args: {
   onTaskPruned: (taskId: string, task: BackgroundTask, errorMessage: string) => void
   taskTtlMs?: number
   sessionStatuses?: SessionStatusMap
+  runtimeMetrics?: RuntimeMetricsCollector
 }): void {
   const { tasks, notifications, onTaskPruned } = args
   const effectiveTtl = args.taskTtlMs ?? TASK_TTL_MS
@@ -88,7 +93,14 @@ export function pruneStaleTasksAndNotifications(args: {
       ? `Task timed out while queued (${ttlMinutes} minutes)`
       : `Task timed out after ${ttlMinutes} minutes of inactivity`
 
+    const wasPending = task.status === "pending"
     onTaskPruned(taskId, task, errorMessage)
+    recordRuntimeTimeoutHit(args.runtimeMetrics, {
+      taskId,
+      correlationId: taskId,
+      sessionID: task.sessionId,
+      reason: wasPending ? "queued-task-pruned" : "stale-task-pruned",
+    })
   }
 
   for (const [sessionID, queued] of notifications.entries()) {
@@ -125,6 +137,7 @@ async function interruptStaleTask(args: {
   timeoutConfigKey: "messageStalenessTimeoutMs" | "sessionGoneTimeoutMs" | "staleTimeoutMs"
   errorSuffix: string
   logReason: string
+  runtimeMetrics?: RuntimeMetricsCollector
 }): Promise<void> {
   const {
     task,
@@ -138,6 +151,7 @@ async function interruptStaleTask(args: {
     timeoutConfigKey,
     errorSuffix,
     logReason,
+    runtimeMetrics,
   } = args
 
   const aborted = await abortWithTimeout(client, sessionID)
@@ -161,6 +175,13 @@ async function interruptStaleTask(args: {
     task.concurrencyKey = undefined
   }
 
+  recordRuntimeTimeoutHit(runtimeMetrics, {
+    taskId: task.id,
+    correlationId: task.id,
+    sessionID,
+    reason,
+  })
+
   onTaskInterrupted(task)
   log(`[background-agent] Task ${task.id} interrupted: ${logReason}`)
 
@@ -181,6 +202,7 @@ export async function checkAndInterruptStaleTasks(args: {
   sessionStatuses?: SessionStatusMap
   onTaskInterrupted?: (task: BackgroundTask) => void
   getSessionActivity?: SessionActivityResolver
+  runtimeMetrics?: RuntimeMetricsCollector
 }): Promise<void> {
   const {
     tasks,
@@ -260,6 +282,7 @@ export async function checkAndInterruptStaleTasks(args: {
           timeoutConfigKey: sessionGone ? "sessionGoneTimeoutMs" : "messageStalenessTimeoutMs",
           errorSuffix: " since start",
           logReason: "no progress since start",
+          runtimeMetrics: args.runtimeMetrics,
         }),
       )
       continue
@@ -310,6 +333,7 @@ export async function checkAndInterruptStaleTasks(args: {
         timeoutConfigKey: sessionGone ? "sessionGoneTimeoutMs" : "staleTimeoutMs",
         errorSuffix: "",
         logReason: "stale timeout",
+        runtimeMetrics: args.runtimeMetrics,
       }),
     )
   }
@@ -317,4 +341,24 @@ export async function checkAndInterruptStaleTasks(args: {
   if (staleInterruptions.length > 0) {
     await Promise.all(staleInterruptions)
   }
+}
+
+function recordRuntimeTimeoutHit(
+  runtimeMetrics: RuntimeMetricsCollector | undefined,
+  fields: {
+    taskId?: string
+    correlationId?: string
+    sessionID?: string
+    reason: string
+  },
+): void {
+  if (!runtimeMetrics) return
+  runtimeMetrics.incrementCounter("runtime_timeout_hits")
+  log("[runtime-metrics] runtime_timeout_hits incremented", {
+    metric: "runtime_timeout_hits",
+    taskId: fields.taskId,
+    correlationId: fields.correlationId,
+    sessionID: fields.sessionID,
+    reason: fields.reason,
+  })
 }

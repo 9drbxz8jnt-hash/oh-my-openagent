@@ -43,6 +43,7 @@ import { isInsideTmux } from "../../shared/tmux"
 import { clearSessionAgent, setSessionAgent, subagentSessions, updateSessionAgent } from "../claude-code-session-state"
 import { MESSAGE_STORAGE } from "../hook-message-injector"
 import { getTaskToastManager } from "../task-toast-manager"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
 import { abortWithTimeout } from "./abort-with-timeout"
 import {
   bindAttemptSession,
@@ -245,6 +246,7 @@ export interface BackgroundManagerConfig {
   enableParentSessionNotifications?: boolean
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   lifecycleMemoryRecorder?: LifecycleMemoryCandidateRecorder
+  runtimeMetrics?: RuntimeMetricsCollector
   log?: typeof log
 }
 
@@ -285,6 +287,7 @@ export class BackgroundManager {
   private modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   private logger: typeof log
   private lifecycleMemoryRecorder: LifecycleMemoryCandidateRecorder
+  private runtimeMetrics?: RuntimeMetricsCollector
   private loggedSessionStatusUnavailable = false
   readonly taskHistory = new TaskHistory()
   private cachedCircuitBreakerSettings?: CircuitBreakerSettings
@@ -298,7 +301,8 @@ export class BackgroundManager {
     this.pendingByParent = new Map()
     this.client = pluginContext.client
     this.directory = pluginContext.directory
-    this.concurrencyManager = new ConcurrencyManager(options.config)
+    this.runtimeMetrics = options.runtimeMetrics
+    this.concurrencyManager = new ConcurrencyManager(options.config, { runtimeMetrics: this.runtimeMetrics })
     this.config = options.config
     this.tmuxEnabled = options?.tmuxConfig?.enabled ?? false
     this.onSubagentSessionCreated = options?.onSubagentSessionCreated
@@ -946,7 +950,7 @@ The fallback retry session is now created and can be inspected directly.
     promptWithRetryInDirectory(this.client, {
       path: { id: sessionID },
       body: promptBody,
-    }, parentDirectory).catch(async (error) => {
+    }, parentDirectory, { runtimeMetrics: this.runtimeMetrics }).catch(async (error) => {
       // Retry with fallback agent if the original agent was unregistered (e.g., after a model switch)
       if (isAgentNotFoundError(error) && input.agent !== FALLBACK_AGENT) {
         log("[background-agent] Agent not found, retrying with fallback agent", {
@@ -973,7 +977,7 @@ The fallback retry session is now created and can be inspected directly.
           await promptWithRetryInDirectory(this.client, {
             path: { id: sessionID },
             body: fallbackBody,
-          }, parentDirectory)
+          }, parentDirectory, { runtimeMetrics: this.runtimeMetrics })
           task.agent = FALLBACK_AGENT
           return
         } catch (retryError) {
@@ -2499,7 +2503,7 @@ The task was re-queued on a fallback model after a retryable failure.
   }
 
   private registerProcessCleanup(): void {
-    registerManagerForCleanup(this)
+    registerManagerForCleanup(this, { runtimeMetrics: this.runtimeMetrics })
   }
 
   private unregisterProcessCleanup(): void {
@@ -2850,6 +2854,7 @@ The task was re-queued on a fallback model after a retryable failure.
       notifications: this.notifications,
       taskTtlMs: this.config?.taskTtlMs,
       sessionStatuses: allStatuses,
+      runtimeMetrics: this.runtimeMetrics,
       onTaskPruned: (taskId, task, errorMessage) => {
         const wasPending = task.status === "pending"
         log("[background-agent] Pruning stale task:", { taskId, status: task.status, age: Math.round(((wasPending ? task.queuedAt?.getTime() : task.startedAt?.getTime()) ? (Date.now() - (wasPending ? task.queuedAt!.getTime() : task.startedAt!.getTime())) : 0) / 1000) + "s" })
@@ -2912,6 +2917,7 @@ The task was re-queued on a fallback model after a retryable failure.
       concurrencyManager: this.concurrencyManager,
       notifyParentSession: (task) => this.enqueueNotificationForParent(task.parentSessionId, () => this.notifyParentSession(task)),
       sessionStatuses: allStatuses,
+      runtimeMetrics: this.runtimeMetrics,
     })
   }
 

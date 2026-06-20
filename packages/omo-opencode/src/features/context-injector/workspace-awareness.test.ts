@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRuntimeMetricsCollector } from "../../shared/runtime-metrics";
 import { buildWorkspaceAwarenessPacket } from "./workspace-awareness";
 
 describe("buildWorkspaceAwarenessPacket", () => {
@@ -137,6 +138,7 @@ describe("buildWorkspaceAwarenessPacket", () => {
 
 	it("continues without memory when the reader times out", async () => {
 		// given
+		const metrics = createRuntimeMetricsCollector();
 		const workspaceRoot = mkdtempSync(
 			join(tmpdir(), "omo-workspace-awareness-timeout-"),
 		);
@@ -169,6 +171,7 @@ describe("buildWorkspaceAwarenessPacket", () => {
 			memoryReader,
 			timeoutMs: 10,
 			maxBytes: 4096,
+			runtimeMetrics: metrics,
 		});
 
 		// then
@@ -176,5 +179,6 @@ describe("buildWorkspaceAwarenessPacket", () => {
 		expect(packet.memoryFactsUsed).toBe(false);
 		expect(packet.content).toContain("timeout-plan");
 		expect(packet.content).not.toContain("Late memory fact");
+		expect(metrics.getMetric("runtime_timeout_hits")).toBe(1);
 	});
 });

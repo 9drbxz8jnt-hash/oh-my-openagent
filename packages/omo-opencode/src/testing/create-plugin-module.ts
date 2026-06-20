@@ -37,6 +37,7 @@ import {
 import { logLegacyPluginStartupWarning } from "../shared/log-legacy-plugin-startup-warning"
 import { log } from "../shared/logger"
 import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
+import { createRuntimeMetricsCollector } from "../shared/runtime-metrics"
 import { startBackgroundCheck as startTmuxCheck } from "../tools/interactive-bash"
 
 type HooksWithRuntimeLifecycle = Hooks & {
@@ -194,6 +195,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
 
     const modelCacheState = deps.createModelCacheState()
     const lifecycleMemoryRecorder = createLifecycleMemoryCandidateRecorder({ workspaceRoot: input.directory })
+    const runtimeMetrics = createRuntimeMetricsCollector()
 
     const managers = deps.createManagers({
       ctx: input,
@@ -203,6 +205,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       backgroundNotificationHookEnabled: isHookEnabled("background-notification"),
       runtimeSkillSourceUrl: runtimeSkillSource?.url,
       lifecycleMemoryRecorder,
+      runtimeMetrics,
     })
 
     const toolsResult = await deps.createTools({
@@ -219,6 +222,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       modelFallbackControllerAccessor: managers.modelFallbackControllerAccessor,
       monitorManager: managers.monitorManager,
       workspaceMemoryReader: deps.workspaceMemoryReader,
+      runtimeMetrics,
       isHookEnabled,
       safeHookEnabled,
       mergedSkills: toolsResult.mergedSkills,

@@ -7,6 +7,7 @@ import { OhMyOpenCodeConfigSchema } from "./config/schema/oh-my-opencode-config"
 import { createManagers } from "./create-managers"
 import * as openclawRuntimeDispatch from "./openclaw/runtime-dispatch"
 import { createModelCacheState } from "./plugin-state"
+import { createRuntimeMetricsCollector } from "./shared/runtime-metrics"
 
 type CleanupRegistration = {
   shutdown: () => void | Promise<void>
@@ -18,6 +19,7 @@ const markServerRunningInProcess = mock(() => {})
 let backgroundManagerOptions: {
   onSubagentSessionCreated?: (event: { sessionID: string; parentID: string; title: string }) => Promise<void>
   onShutdown?: () => void | Promise<void>
+  runtimeMetrics?: ReturnType<typeof createRuntimeMetricsCollector>
 } | null = null
 const trackedPaneBySession = new Map<string, string>()
 const registeredCleanupManagers: CleanupRegistration[] = []
@@ -191,6 +193,23 @@ describe("createManagers", () => {
     createManagers(args)
 
     expect(markServerRunningInProcess).not.toHaveBeenCalled()
+  })
+
+  it("#given runtime metrics are provided #when managers are created #then BackgroundManager receives the same collector", () => {
+    const runtimeMetrics = createRuntimeMetricsCollector()
+    const args = {
+      ctx: createContext("/tmp"),
+      pluginConfig: OhMyOpenCodeConfigSchema.parse({}),
+      tmuxConfig: createTmuxConfig(false),
+      modelCacheState: createModelCacheState(),
+      backgroundNotificationHookEnabled: false,
+      runtimeMetrics,
+      deps: createDeps(),
+    }
+
+    createManagers(args)
+
+    expect(backgroundManagerOptions?.runtimeMetrics).toBe(runtimeMetrics)
   })
 
   it("#given tmux integration is enabled #when managers are created #then it marks the tmux server as running", () => {

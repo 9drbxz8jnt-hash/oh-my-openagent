@@ -1,3 +1,5 @@
+import type { RuntimeMetricsCollector } from "./runtime-metrics"
+
 export interface PromptTimeoutArgs {
   signal?: AbortSignal
 }
@@ -7,6 +9,7 @@ export interface PromptRetryOptions {
   queueBehavior?: "enqueue" | "defer"
   checkStatus?: boolean
   checkToolState?: boolean
+  runtimeMetrics?: RuntimeMetricsCollector
 }
 
 export const PROMPT_TIMEOUT_MS = 120000

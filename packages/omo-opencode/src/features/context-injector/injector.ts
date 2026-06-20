@@ -2,6 +2,7 @@ import type { Message, Part } from "@opencode-ai/sdk"
 import type { ContextCollector } from "./collector"
 import type { WorkspaceMemoryReader } from "./workspace-awareness"
 import { isRealUserMessage, isRealUserTextPart, log } from "../../shared"
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics"
 import { buildWorkspaceAwarenessPacket } from "./workspace-awareness"
 import { getMainSessionID } from "../claude-code-session-state"
 
@@ -114,6 +115,7 @@ export function createContextInjectorMessagesTransformHook(
   collector: ContextCollector,
   defaultWorkspaceRoot = process.cwd(),
   memoryReader?: WorkspaceMemoryReader,
+  runtimeMetrics?: RuntimeMetricsCollector,
 ): MessagesTransformHook {
   const preparedWorkspaceSessions = new Set<string>()
 
@@ -168,6 +170,7 @@ export function createContextInjectorMessagesTransformHook(
             sessionID,
             workspaceRoot,
             memoryReader,
+            runtimeMetrics,
           })
 
           if (packet.memoryTimedOut) {

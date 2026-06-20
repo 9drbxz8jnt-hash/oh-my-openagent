@@ -1,7 +1,11 @@
 import { afterEach, describe, it, expect, mock } from "bun:test"
 import { dispatchInternalPrompt, releaseAllPromptAsyncReservationsForTesting } from "./prompt-async-gate"
 import { parseModelSuggestion, promptWithModelSuggestionRetry, promptSyncWithModelSuggestionRetry } from "./model-suggestion-retry"
+import { createRuntimeMetricsCollector } from "./runtime-metrics"
 import { unsafeTestValue } from "../../../../test-support/unsafe-test-value"
+
+type PromptAsyncRetryArgs = Parameters<typeof promptWithModelSuggestionRetry>[1]
+type PromptSyncRetryArgs = Parameters<typeof promptSyncWithModelSuggestionRetry>[1]
 
 describe("parseModelSuggestion", () => {
   describe("structured NamedError format", () => {
@@ -257,7 +261,7 @@ describe("promptWithModelSuggestionRetry", () => {
         parts: [{ type: "text", text: "hello" }],
         model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
       },
-    }
+    } satisfies PromptAsyncRetryArgs
 
     // when both callers try to prompt the same session before the first dispatch settles
     const first = promptWithModelSuggestionRetry(unsafeTestValue(client), args)
@@ -286,7 +290,7 @@ describe("promptWithModelSuggestionRetry", () => {
         parts: [{ type: "text", text: "hello" }],
         model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
       },
-    }
+    } satisfies PromptAsyncRetryArgs
 
     // when
     await promptWithModelSuggestionRetry(unsafeTestValue(client), args)
@@ -310,7 +314,7 @@ describe("promptWithModelSuggestionRetry", () => {
         parts: [{ type: "text", text: "hello" }],
         model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
       },
-    }
+    } satisfies PromptAsyncRetryArgs
 
     // when
     await promptWithModelSuggestionRetry(unsafeTestValue(client), args)
@@ -412,7 +416,7 @@ describe("promptWithModelSuggestionRetry", () => {
         parts: [{ type: "text", text: "hello" }],
         model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
       },
-    }
+    } satisfies PromptAsyncRetryArgs
 
     // when
     await promptWithModelSuggestionRetry(unsafeTestValue(client), args)
@@ -443,7 +447,7 @@ describe("promptWithModelSuggestionRetry", () => {
         agent: "missing-agent",
         parts: [{ type: "text", text: "hello" }],
       },
-    }
+    } satisfies PromptAsyncRetryArgs
 
     // when
     await expect(
@@ -467,17 +471,20 @@ describe("promptWithModelSuggestionRetry", () => {
     const client = { session: { promptAsync: promptMock } }
 
     // when calling with additional body fields
-    await promptWithModelSuggestionRetry(unsafeTestValue(client), {
-      path: { id: "session-1" },
-      body: {
-        agent: "explore",
-        system: "You are a helpful agent",
-        tools: { task: false },
-        parts: [{ type: "text", text: "hello" }],
-        model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
-        variant: "max",
-      },
-    })
+    await promptWithModelSuggestionRetry(
+      unsafeTestValue(client),
+      unsafeTestValue<PromptAsyncRetryArgs>({
+        path: { id: "session-1" },
+        body: {
+          agent: "explore",
+          system: "You are a helpful agent",
+          tools: { task: false },
+          parts: [{ type: "text", text: "hello" }],
+          model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+          variant: "max",
+        },
+      }),
+    )
 
     // then call should pass all fields through unchanged
     const call = promptMock.mock.calls[0][0]
@@ -536,6 +543,43 @@ describe("promptWithModelSuggestionRetry", () => {
     // and should call promptAsync only once
     expect(promptMock).toHaveBeenCalledTimes(1)
   })
+
+  it("should increment prompt timeout metric once when promptAsync times out", async () => {
+    // given
+    const metrics = createRuntimeMetricsCollector()
+    let receivedSignal: AbortSignal | undefined
+    const promptMock = mock((input: { signal?: AbortSignal }) => {
+      receivedSignal = input.signal
+      return new Promise((_, reject) => {
+        const signal = input.signal
+        if (!signal) {
+          return
+        }
+        signal.addEventListener("abort", () => {
+          reject(signal.reason)
+        })
+      })
+    })
+    const client = { session: { promptAsync: promptMock } }
+
+    // when / then
+    await expect(
+      promptWithModelSuggestionRetry(
+        unsafeTestValue(client),
+        {
+          path: { id: "session-async-timeout" },
+          body: {
+            parts: [{ type: "text", text: "hello" }],
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+          },
+        },
+        { timeoutMs: 1, runtimeMetrics: metrics },
+      ),
+    ).rejects.toThrow("promptAsync timed out after 1ms")
+
+    expect(receivedSignal?.aborted).toBe(true)
+    expect(metrics.getMetric("runtime_timeout_hits")).toBe(1)
+  })
 })
 
 describe("promptSyncWithModelSuggestionRetry", () => {
@@ -573,7 +617,7 @@ describe("promptSyncWithModelSuggestionRetry", () => {
         parts: [{ type: "text", text: "hello" }],
         model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
       },
-    }
+    } satisfies PromptSyncRetryArgs
 
     // when
     await promptSyncWithModelSuggestionRetry(unsafeTestValue(client), args)
@@ -586,6 +630,7 @@ describe("promptSyncWithModelSuggestionRetry", () => {
 
   it("should abort and throw timeout error when sync prompt hangs", async () => {
     // given a client where sync prompt never resolves unless aborted
+    const metrics = createRuntimeMetricsCollector()
     let receivedSignal: AbortSignal | undefined
     const promptMock = mock((input: { signal?: AbortSignal }) => {
       receivedSignal = input.signal
@@ -609,16 +654,55 @@ describe("promptSyncWithModelSuggestionRetry", () => {
     // when calling with short timeout
     // then should abort the request and throw timeout error
     await expect(
-      promptSyncWithModelSuggestionRetry(unsafeTestValue(client), {
-        path: { id: "session-1" },
-        body: {
-          parts: [{ type: "text", text: "hello" }],
-          model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+      promptSyncWithModelSuggestionRetry(
+        unsafeTestValue(client),
+        {
+          path: { id: "session-1" },
+          body: {
+            parts: [{ type: "text", text: "hello" }],
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+          },
         },
-      }, { timeoutMs: 1 })
+        { timeoutMs: 1 },
+      ),
     ).rejects.toThrow("prompt timed out after 1ms")
 
     expect(receivedSignal?.aborted).toBe(true)
+    expect(metrics.getMetric("runtime_timeout_hits")).toBe(0)
+  })
+
+  it("should increment sync prompt timeout metric once when sync prompt hangs", async () => {
+    // given
+    const metrics = createRuntimeMetricsCollector()
+    const promptMock = mock((input: { signal?: AbortSignal }) => {
+      return new Promise((_, reject) => {
+        const signal = input.signal
+        if (!signal) {
+          return
+        }
+        signal.addEventListener("abort", () => {
+          reject(signal.reason)
+        })
+      })
+    })
+    const client = { session: { prompt: promptMock } }
+
+    // when / then
+    await expect(
+      promptSyncWithModelSuggestionRetry(
+        unsafeTestValue(client),
+        {
+          path: { id: "session-sync-timeout" },
+          body: {
+            parts: [{ type: "text", text: "hello" }],
+            model: { providerID: "anthropic", modelID: "claude-sonnet-4" },
+          },
+        },
+        { timeoutMs: 1, runtimeMetrics: metrics },
+      ),
+    ).rejects.toThrow("prompt timed out after 1ms")
+
+    expect(metrics.getMetric("runtime_timeout_hits")).toBe(1)
   })
 
   it("#given sync prompt throws after dispatch was attempted #when caller observes ambiguous EOF #then it treats the prompt as accepted", async () => {
@@ -724,16 +808,19 @@ describe("promptSyncWithModelSuggestionRetry", () => {
     const client = { session: { prompt: promptMock } }
 
     // when calling with additional body fields
-    await promptSyncWithModelSuggestionRetry(unsafeTestValue(client), {
-      path: { id: "session-1" },
-      body: {
-        agent: "multimodal-looker",
-        tools: { task: false },
-        parts: [{ type: "text", text: "analyze" }],
-        model: { providerID: "google", modelID: "gemini-3-flash" },
-        variant: "max",
-      },
-    })
+    await promptSyncWithModelSuggestionRetry(
+      unsafeTestValue(client),
+      unsafeTestValue<PromptSyncRetryArgs>({
+        path: { id: "session-1" },
+        body: {
+          agent: "multimodal-looker",
+          tools: { task: false },
+          parts: [{ type: "text", text: "analyze" }],
+          model: { providerID: "google", modelID: "gemini-3-flash" },
+          variant: "max",
+        },
+      }),
+    )
 
     // then call should pass all fields through unchanged
     const call = promptMock.mock.calls[0][0]

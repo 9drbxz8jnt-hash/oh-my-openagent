@@ -5,14 +5,17 @@ import { join } from "node:path"
 import type { WorkspaceMemoryReader } from "../features/context-injector"
 import { PLUGIN_NAME } from "../shared"
 import { getLocale, initI18n, t } from "../shared/i18n"
-import { createPluginModule } from "./create-plugin-module"
+import { createPluginModule, type PluginModuleDeps } from "./create-plugin-module"
 
 const sourcePlugin = new URL("../index.ts", import.meta.url).href
+
+type CreateManagersArgs = Parameters<PluginModuleDeps["createManagers"]>[0]
+type CreateHooksArgs = Parameters<PluginModuleDeps["createHooks"]>[0]
 
 const mockInitConfigContext = mock(() => {})
 const mockDetectExternalSkillPlugin = mock(() => ({ detected: false, pluginName: null, allPlugins: [] }))
 const mockGetSkillPluginConflictWarning = mock(() => "")
-const mockDetectDuplicateOmoPlugin = mock(() => ({
+const mockDetectDuplicateOmoPlugin = mock<PluginModuleDeps["detectDuplicateOmoPlugin"]>(() => ({
   detected: false,
   pluginName: null,
   duplicatePlugins: [],
@@ -34,7 +37,7 @@ const mockCreateRuntimeTmuxConfig = mock(() => ({
   agent_pane_min_width: 40,
   isolation: "inline" as const,
 }))
-const mockCreateManagers = mock(() => ({
+const mockCreateManagers = mock((_args: CreateManagersArgs) => ({
   backgroundManager: { shutdown: async () => {} },
   skillMcpManager: { disconnectAll: async () => {} },
   configHandler: async () => {},
@@ -57,7 +60,7 @@ const mockCreateTools = mock(async () => ({
   availableSkills: [],
   filteredTools: {},
 }))
-const mockCreateHooks = mock(() => ({
+const mockCreateHooks = mock((_args: CreateHooksArgs) => ({
   disposeHooks: () => {},
   compactionContextInjector: undefined,
   compactionTodoPreserver: undefined,
@@ -210,6 +213,24 @@ describe("createPluginModule()", () => {
   })
 
   describe("#given bundled security skills are enabled", () => {
+    it("#then startup creates one runtime metrics collector and threads it into managers and hooks", async () => {
+      // given
+      const pluginModule = createTestPluginModule()
+      mockLoadPluginConfig.mockReturnValue({})
+
+      // when
+      await pluginModule.server({
+        directory: "/tmp/project",
+        client: {},
+      } as Parameters<typeof pluginModule.server>[0])
+
+      // then
+      const managerArgs = mockCreateManagers.mock.calls.at(0)?.[0]
+      const hookArgs = mockCreateHooks.mock.calls.at(0)?.[0]
+      expect(managerArgs?.runtimeMetrics).toBeDefined()
+      expect(hookArgs?.runtimeMetrics).toBe(managerArgs?.runtimeMetrics)
+    })
+
     it("#then startup exposes them through a runtime skill source URL", async () => {
       // given
       const pluginModule = createTestPluginModule()

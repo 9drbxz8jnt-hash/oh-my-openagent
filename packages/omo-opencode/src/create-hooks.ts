@@ -7,6 +7,7 @@ import type { MonitorManager } from "./features/monitor"
 import type { ModelFallbackControllerAccessor } from "./hooks/model-fallback"
 import type { PluginContext } from "./plugin/types"
 import type { ModelCacheState } from "./plugin-state"
+import type { RuntimeMetricsCollector } from "./shared/runtime-metrics"
 
 import { createCoreHooks } from "./plugin/hooks/create-core-hooks"
 import { createContinuationHooks } from "./plugin/hooks/create-continuation-hooks"
@@ -42,6 +43,7 @@ export function createHooks(args: {
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   monitorManager?: MonitorManager
   workspaceMemoryReader?: WorkspaceMemoryReader
+  runtimeMetrics?: RuntimeMetricsCollector
   isHookEnabled: (hookName: HookName) => boolean
   safeHookEnabled: boolean
   mergedSkills: LoadedSkill[]
@@ -55,6 +57,7 @@ export function createHooks(args: {
     modelFallbackControllerAccessor,
     monitorManager,
     workspaceMemoryReader,
+    runtimeMetrics,
     isHookEnabled,
     safeHookEnabled,
     mergedSkills,
@@ -69,6 +72,7 @@ export function createHooks(args: {
     modelFallbackControllerAccessor,
     monitorManager,
     workspaceMemoryReader,
+    runtimeMetrics,
     isHookEnabled,
     safeHookEnabled,
   })

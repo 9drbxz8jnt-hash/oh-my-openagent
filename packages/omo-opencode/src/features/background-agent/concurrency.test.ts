@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach } from "bun:test"
 import { ConcurrencyManager } from "./concurrency"
 import type { BackgroundTaskConfig } from "../../config/schema"
+import { createRuntimeMetricsCollector } from "../../shared/runtime-metrics"
 
 describe("ConcurrencyManager.getConcurrencyLimit", () => {
   test("should return model-specific limit when modelConcurrency is set", () => {
@@ -397,6 +398,57 @@ describe("ConcurrencyManager.acquire/release", () => {
 })
 
 describe("ConcurrencyManager.cleanup", () => {
+  test("should update total queue depth metric across enqueue dequeue cancel and clear", async () => {
+    // given
+    const metrics = createRuntimeMetricsCollector()
+    const config: BackgroundTaskConfig = {
+      providerConcurrency: { anthropic: 1, openai: 1 },
+    }
+    const manager = new ConcurrencyManager(config, { runtimeMetrics: metrics })
+    await manager.acquire("anthropic/claude-sonnet-4-6", "running-anthropic")
+    await manager.acquire("openai/gpt-5.5", "running-openai")
+
+    // when
+    const firstAnthropic = manager.acquire(
+      "anthropic/claude-opus-4-7",
+      "queued-anthropic-1",
+    )
+    const secondAnthropic = manager.acquire(
+      "anthropic/claude-haiku-4-5",
+      "queued-anthropic-2",
+    )
+    const openaiWaiter = manager.acquire("openai/gpt-5.5", "queued-openai")
+    await Promise.resolve()
+
+    // then
+    expect(metrics.getMetric("background_queue_depth")).toBe(3)
+
+    // when
+    manager.release("anthropic/claude-sonnet-4-6")
+    await firstAnthropic
+
+    // then
+    expect(metrics.getMetric("background_queue_depth")).toBe(2)
+
+    // when
+    const cancelled = manager.cancelWaiter(
+      "anthropic/claude-opus-4-7",
+      "queued-anthropic-2",
+    )
+    await secondAnthropic.catch(() => undefined)
+
+    // then
+    expect(cancelled).toBe(true)
+    expect(metrics.getMetric("background_queue_depth")).toBe(1)
+
+    // when
+    manager.clear()
+    await openaiWaiter.catch(() => undefined)
+
+    // then
+    expect(metrics.getMetric("background_queue_depth")).toBe(0)
+  })
+
   test("cancelWaiter should cancel a raw model waiter stored under a normalized provider key", async () => {
     // given
     const rawKey = "anthropic/claude-sonnet-4-6"

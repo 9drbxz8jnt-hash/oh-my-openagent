@@ -44,6 +44,33 @@ function shouldReleaseReservationAfterFailedAsyncPrompt(error: unknown): boolean
   return parseModelSuggestionFromCore(error) !== null || isAgentResolutionError(error)
 }
 
+function getPromptCorrelationId(args: {
+  body: { messageID?: string }
+}): string | undefined {
+  return typeof args.body.messageID === "string" ? args.body.messageID : undefined
+}
+
+function createPromptTimeoutMetricRecorder(
+  args: { path: { id: string }; body: { messageID?: string } },
+  options: PromptRetryOptions,
+  reason: string,
+  timeoutMs: number,
+): () => void {
+  let recorded = false
+  return () => {
+    if (recorded || !options.runtimeMetrics) return
+    recorded = true
+    options.runtimeMetrics.incrementCounter("runtime_timeout_hits")
+    log("[runtime-metrics] runtime_timeout_hits incremented", {
+      metric: "runtime_timeout_hits",
+      sessionID: args.path.id,
+      correlationId: getPromptCorrelationId(args),
+      reason,
+      timeoutMs,
+    })
+  }
+}
+
 type PromptAsyncArgs = Omit<SessionPromptAsyncData, "url" | "body"> & {
   readonly body: NonNullable<SessionPromptAsyncData["body"]>
   readonly signal?: AbortSignal
@@ -76,6 +103,12 @@ export async function promptWithModelSuggestionRetry(
 ): Promise<void> {
   const timeoutMs = options.timeoutMs ?? PROMPT_TIMEOUT_MS
   const timeoutContext = createPromptTimeoutContext(args, timeoutMs)
+  const recordTimeoutHit = createPromptTimeoutMetricRecorder(
+    args,
+    options,
+    "promptAsync-timeout",
+    timeoutMs,
+  )
 
   try {
     const promptResult = await dispatchInternalPrompt({
@@ -94,6 +127,7 @@ export async function promptWithModelSuggestionRetry(
     })
     if (promptResult.status === "failed") {
       if (timeoutContext.wasTimedOut()) {
+        recordTimeoutHit()
         throw new Error(`promptAsync timed out after ${timeoutMs}ms`)
       }
       if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
@@ -105,10 +139,12 @@ export async function promptWithModelSuggestionRetry(
       throw new Error(`promptAsync skipped by gate: ${promptResult.status}`)
     }
     if (timeoutContext.wasTimedOut()) {
+      recordTimeoutHit()
       throw new Error(`promptAsync timed out after ${timeoutMs}ms`)
     }
   } catch (error) {
     if (timeoutContext.wasTimedOut()) {
+      recordTimeoutHit()
       throw new Error(`promptAsync timed out after ${timeoutMs}ms`)
     }
     if (shouldReleaseReservationAfterFailedAsyncPrompt(error)) {
@@ -129,6 +165,12 @@ export async function promptSyncWithModelSuggestionRetry(
 
   try {
     const timeoutContext = createPromptTimeoutContext(args, timeoutMs)
+    const recordTimeoutHit = createPromptTimeoutMetricRecorder(
+      args,
+      options,
+      "prompt-timeout",
+      timeoutMs,
+    )
     try {
       const promptResult = await dispatchInternalPrompt({
         mode: "sync",
@@ -146,6 +188,7 @@ export async function promptSyncWithModelSuggestionRetry(
       })
       if (promptResult.status === "failed") {
         if (timeoutContext.wasTimedOut()) {
+          recordTimeoutHit()
           throw new Error(`prompt timed out after ${timeoutMs}ms`)
         }
         if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
@@ -157,10 +200,12 @@ export async function promptSyncWithModelSuggestionRetry(
         throw new Error(`prompt skipped by gate: ${promptResult.status}`)
       }
       if (timeoutContext.wasTimedOut()) {
+        recordTimeoutHit()
         throw new Error(`prompt timed out after ${timeoutMs}ms`)
       }
     } catch (error) {
       if (timeoutContext.wasTimedOut()) {
+        recordTimeoutHit()
         throw new Error(`prompt timed out after ${timeoutMs}ms`)
       }
       throw error
@@ -195,6 +240,12 @@ export async function promptSyncWithModelSuggestionRetry(
     }
 
     const timeoutContext = createPromptTimeoutContext(retryArgs, timeoutMs)
+    const recordTimeoutHit = createPromptTimeoutMetricRecorder(
+      retryArgs,
+      options,
+      "prompt-retry-timeout",
+      timeoutMs,
+    )
     try {
       const promptResult = await dispatchInternalPrompt({
         mode: "sync",
@@ -212,6 +263,7 @@ export async function promptSyncWithModelSuggestionRetry(
       })
       if (promptResult.status === "failed") {
         if (timeoutContext.wasTimedOut()) {
+          recordTimeoutHit()
           throw new Error(`prompt timed out after ${timeoutMs}ms`)
         }
         if (isAmbiguousPostDispatchPromptFailure(promptResult)) {
@@ -223,10 +275,12 @@ export async function promptSyncWithModelSuggestionRetry(
         throw new Error(`prompt skipped by gate: ${promptResult.status}`)
       }
       if (timeoutContext.wasTimedOut()) {
+        recordTimeoutHit()
         throw new Error(`prompt timed out after ${timeoutMs}ms`)
       }
     } catch (retryError) {
       if (timeoutContext.wasTimedOut()) {
+        recordTimeoutHit()
         throw new Error(`prompt timed out after ${timeoutMs}ms`)
       }
       throw retryError

@@ -5,7 +5,7 @@
 mock.module("./process-cleanup-isolation", () => ({}))
 
 import { afterAll, afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test"
-
+import { createRuntimeMetricsCollector } from "../../shared/runtime-metrics"
 import {
   _resetForTesting,
   describeProcessCleanupError,
@@ -85,6 +85,42 @@ describe("#given process cleanup registration", () => {
       exitListener()
 
       expect(shutdown).toHaveBeenCalledTimes(1)
+    })
+
+    test("#given a cleanup manager throws synchronously #when cleanup runs #then cleanup failure metric increments", async () => {
+      const metrics = createRuntimeMetricsCollector()
+      const manager = {
+        shutdown: mock(() => {
+          throw new Error("sync cleanup failed")
+        }),
+      }
+      registeredManagers.push(manager)
+
+      registerManagerForCleanup(manager, { runtimeMetrics: metrics })
+
+      const exitListener = getRegisteredProcessCleanupSignalListener("exit")
+      exitListener()
+      await flushMicrotasks()
+
+      expect(metrics.getMetric("cleanup_failures")).toBe(1)
+    })
+
+    test("#given a cleanup manager rejects asynchronously #when cleanup runs #then cleanup failure metric increments", async () => {
+      const metrics = createRuntimeMetricsCollector()
+      const manager = {
+        shutdown: mock(async () => {
+          throw new Error("async cleanup failed")
+        }),
+      }
+      registeredManagers.push(manager)
+
+      registerManagerForCleanup(manager, { runtimeMetrics: metrics })
+
+      const exitListener = getRegisteredProcessCleanupSignalListener("exit")
+      exitListener()
+      await flushMicrotasks()
+
+      expect(metrics.getMetric("cleanup_failures")).toBe(1)
     })
 
     test("#when cleanup finishes after SIGINT #then the fallback exit timer is cleared", async () => {

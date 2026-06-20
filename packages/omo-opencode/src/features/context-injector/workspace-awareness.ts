@@ -5,6 +5,8 @@ import {
 	NOTEPAD_BASE_PATH,
 	PROMETHEUS_PLANS_DIR,
 } from "@oh-my-opencode/boulder-state";
+import { log } from "../../shared";
+import type { RuntimeMetricsCollector } from "../../shared/runtime-metrics";
 
 const DEFAULT_MAX_BYTES = 4_096;
 const DEFAULT_MEMORY_TIMEOUT_MS = 200;
@@ -44,6 +46,7 @@ export interface BuildWorkspaceAwarenessPacketArgs {
 	memoryReader?: WorkspaceMemoryReader;
 	timeoutMs?: number;
 	maxBytes?: number;
+	runtimeMetrics?: RuntimeMetricsCollector;
 }
 
 export async function buildWorkspaceAwarenessPacket(
@@ -93,6 +96,9 @@ export async function buildWorkspaceAwarenessPacket(
 		timeoutMs,
 		maxFacts: DEFAULT_MEMORY_FACT_LIMIT,
 	});
+	if (memoryResult.timedOut) {
+		recordMemoryTimeoutHit(args.runtimeMetrics, args.sessionID);
+	}
 
 	if (memoryResult.facts.length > 0) {
 		append("### Durable memory");
@@ -109,6 +115,21 @@ export async function buildWorkspaceAwarenessPacket(
 		memoryFactsUsed: memoryResult.facts.length > 0,
 		truncated: append.truncated,
 	};
+}
+
+function recordMemoryTimeoutHit(
+	runtimeMetrics: RuntimeMetricsCollector | undefined,
+	sessionID: string,
+): void {
+	if (!runtimeMetrics) {
+		return;
+	}
+	runtimeMetrics.incrementCounter("runtime_timeout_hits");
+	log("[runtime-metrics] runtime_timeout_hits incremented", {
+		metric: "runtime_timeout_hits",
+		sessionID,
+		reason: "workspace-awareness-memory-timeout",
+	});
 }
 
 function collectPlanSummaries(workspaceRoot: string): string[] {
