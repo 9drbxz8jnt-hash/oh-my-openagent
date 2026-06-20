@@ -1,8 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
-import { HOOK_NAME, BLOCKED_TOOLS, PLANNING_CONSULT_WARNING, PLANNING_CONTEXT_OPEN, PROMETHEUS_WORKFLOW_REMINDER } from "./constants"
+import { BLOCKED_TOOLS, HOOK_NAME, PLANNING_CONSULT_WARNING, PLANNING_CONTEXT_OPEN, PROMETHEUS_WORKFLOW_REMINDER } from "./constants"
 import { log } from "../../shared/logger"
 import { replaceToolArgs } from "../../shared/replace-tool-args"
-import { getAgentDisplayName } from "../../shared/agent-display-names"
 import { getAgentFromSession } from "./agent-resolution"
 import { isPrometheusAgent } from "./agent-matcher"
 import { isAllowedFile } from "./path-policy"
@@ -47,14 +46,14 @@ export function createPrometheusMdOnlyHook(ctx: PluginInput) {
       }
 
        if (!isAllowedFile(filePath, ctx.directory)) {
-         log(`[${HOOK_NAME}] Blocked: Prometheus can only write to .omo/*.md`, {
+          log(`[${HOOK_NAME}] Blocked: Prometheus can only write to .omo/drafts/*.md or .omo/plans/*.md`, {
            sessionID: input.sessionID,
            tool: toolName,
            filePath,
            agent: agentName,
          })
          throw new Error(
-           `[${HOOK_NAME}] Prometheus is a planning agent. File operations restricted to .omo/*.md plan files only. Use task() to delegate implementation. ` +
+            `[${HOOK_NAME}] Prometheus is a planning agent. File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only. Use task() to delegate implementation. ` +
            `Attempted to modify: ${filePath}. ` +
            `APOLOGIZE TO THE USER, REMIND OF YOUR PLAN WRITING PROCESSES, TELL USER WHAT YOU WILL GOING TO DO AS THE PROCESS, WRITE THE PLAN`
          )
@@ -71,7 +70,7 @@ export function createPrometheusMdOnlyHook(ctx: PluginInput) {
         output.message = (output.message || "") + PROMETHEUS_WORKFLOW_REMINDER
       }
 
-      log(`[${HOOK_NAME}] Allowed: .omo/*.md write permitted`, {
+      log(`[${HOOK_NAME}] Allowed: .omo/drafts or .omo/plans markdown write permitted`, {
         sessionID: input.sessionID,
         tool: toolName,
         filePath,

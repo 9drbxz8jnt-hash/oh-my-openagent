@@ -1,6 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk";
-import type { AgentMode, AgentPromptMetadata } from "./types";
+import { appendCollaborationContract, buildMemoryCandidateContract } from "./collaboration-contracts";
 import { buildClaudeThinkingConfig, isGptModel } from "./types";
+import type { AgentMode, AgentPromptMetadata } from "./types";
 import { createAgentToolRestrictions } from "../shared/permission-compat";
 
 const MODE: AgentMode = "subagent";
@@ -276,6 +277,13 @@ Approve by default. Max 3 issues. Be specific - "Task X needs Y" not "needs more
 Response language: match the language of the plan content.
 </final_rules>`;
 
+const MOMUS_COLLABORATION_CONTRACT = `${buildMemoryCandidateContract()}
+
+## Supervisor Review Boundary
+
+- You review the plan file only. Do not review implementation diffs, unrelated docs, or ambient workspace state unless the plan file references them.
+- Keep verdicts machine-checkable with exactly one leading \`[OKAY]\` or \`[REJECT]\`.`;
+
 export { MOMUS_DEFAULT_PROMPT as MOMUS_SYSTEM_PROMPT };
 
 export function createMomusAgent(model: string): AgentConfig {
@@ -292,13 +300,13 @@ export function createMomusAgent(model: string): AgentConfig {
     model,
     temperature: 0.1,
     ...restrictions,
-    prompt: MOMUS_DEFAULT_PROMPT,
+    prompt: appendCollaborationContract(MOMUS_DEFAULT_PROMPT, MOMUS_COLLABORATION_CONTRACT),
   } as AgentConfig;
 
   if (isGptModel(model)) {
     return {
       ...base,
-      prompt: MOMUS_GPT_PROMPT,
+      prompt: appendCollaborationContract(MOMUS_GPT_PROMPT, MOMUS_COLLABORATION_CONTRACT),
       reasoningEffort: "medium",
       textVerbosity: "high",
     } as AgentConfig;

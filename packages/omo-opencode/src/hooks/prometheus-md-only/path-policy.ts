@@ -1,6 +1,8 @@
-import { relative, resolve, isAbsolute } from "node:path"
+import { isAbsolute, relative, resolve } from "node:path"
 
 import { ALLOWED_EXTENSIONS } from "./constants"
+
+const ALLOWED_OMO_SUBDIRECTORIES = ["drafts", "plans"] as const
 
 /**
  * Cross-platform path validator for Prometheus file writes.
@@ -23,7 +25,12 @@ export function isAllowedFile(filePath: string, workspaceRoot: string): boolean 
     return false
   }
 
-  if (!/(^|[/\\])\.omo([/\\]|$)/i.test(rel)) {
+  const allowedOmoDirectory = ALLOWED_OMO_SUBDIRECTORIES.some((directory) => {
+    const pattern = new RegExp(`(^|[/\\\\])\\.omo[/\\\\]${directory}([/\\\\]|$)`, "i")
+    return pattern.test(rel)
+  })
+
+  if (!allowedOmoDirectory) {
     return false
   }
 

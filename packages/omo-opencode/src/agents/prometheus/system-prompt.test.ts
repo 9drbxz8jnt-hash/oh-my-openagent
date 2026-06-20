@@ -25,6 +25,7 @@ describe("getPrometheusPrompt thin prompt contract", () => {
 
         expect(prompt).toContain("You are Prometheus, a planning consultant")
         expect(prompt).toContain("You are a PLANNER")
+        expect(prompt).toContain("write only `.omo/drafts/*.md` and `.omo/plans/*.md`")
         expect(prompt).toContain("ulw-plan skill")
         expect(prompt).toContain('skill(name="shared/ulw-plan")')
       })

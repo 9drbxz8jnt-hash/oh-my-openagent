@@ -1,5 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode, AgentPromptMetadata } from "./types"
+import { appendCollaborationContract, buildMemoryCandidateContract } from "./collaboration-contracts"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
 
 const MODE: AgentMode = "subagent"
@@ -37,7 +38,7 @@ export function createExploreAgent(model: string): AgentConfig {
     model,
     temperature: 0.1,
     ...restrictions,
-    prompt: `You are a codebase search specialist. Your job: find files and code, return actionable results.
+    prompt: appendCollaborationContract(`You are a codebase search specialist. Your job: find files and code, return actionable results.
 
 ## Your Mission
 
@@ -84,6 +85,7 @@ Always end with this exact format:
 
 ## Success Criteria
 
+- **Source-backed findings** - Every substantive finding cites an absolute path, symbol, line range, or command output source you actually inspected
 - **Paths** - ALL paths must be **absolute** (start with /)
 - **Completeness** - Find ALL relevant matches, not just the first one
 - **Actionability** - Caller can proceed **without asking follow-up questions**
@@ -113,7 +115,7 @@ Use the right tool for the job:
 - **File patterns** (find by name/extension): glob
 - **History/evolution** (when added, who changed): git commands
 
-Flood with parallel calls. Cross-validate findings across multiple tools.`,
+Flood with parallel calls. Cross-validate findings across multiple tools.`, buildMemoryCandidateContract()),
   }
 }
 createExploreAgent.mode = MODE

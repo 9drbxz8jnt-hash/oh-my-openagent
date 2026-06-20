@@ -11,14 +11,15 @@
  */
 
 import type { AgentConfig } from "@opencode-ai/sdk"
-import type { AgentMode } from "../types"
-import { isGlmModel, isGpt5_5Model, isGptModel, isGeminiModel, isKimiK2Model, isKimiK27Model, buildClaudeThinkingConfig } from "../types"
 import type { AgentOverrideConfig } from "../../config/schema"
 import {
   createAgentToolRestrictions,
   migrateAgentConfig,
   type PermissionValue,
 } from "../../shared/permission-compat"
+import { appendCollaborationContract, buildMemoryCandidateContract } from "../collaboration-contracts"
+import { buildClaudeThinkingConfig, isGeminiModel, isGlmModel, isGpt5_5Model, isGptModel, isKimiK2Model, isKimiK27Model } from "../types"
+import type { AgentMode } from "../types"
 
 import { buildDefaultSisyphusJuniorPrompt } from "./default"
 import { buildKimiK26SisyphusJuniorPrompt } from "./kimi-k2-6"
@@ -75,25 +76,25 @@ export function buildSisyphusJuniorPrompt(
   promptAppend?: string
 ): string {
   const source = getSisyphusJuniorPromptSource(model)
+  const appendMemoryContract = (prompt: string) => appendCollaborationContract(prompt, buildMemoryCandidateContract())
 
   switch (source) {
     case "kimi-k2-7":
-      return buildKimiK27SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildKimiK27SisyphusJuniorPrompt(useTaskSystem, promptAppend))
     case "kimi-k2":
-      return buildKimiK26SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildKimiK26SisyphusJuniorPrompt(useTaskSystem, promptAppend))
     case "gpt-5-5":
-      return buildGpt55SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildGpt55SisyphusJuniorPrompt(useTaskSystem, promptAppend))
     case "gpt-5-4":
-      return buildGpt54SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildGpt54SisyphusJuniorPrompt(useTaskSystem, promptAppend))
     case "gpt":
-      return buildGptSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildGptSisyphusJuniorPrompt(useTaskSystem, promptAppend))
     case "gemini":
-      return buildGeminiSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildGeminiSisyphusJuniorPrompt(useTaskSystem, promptAppend))
     case "glm-5-2":
-      return buildGlm52SisyphusJuniorPrompt(useTaskSystem, promptAppend)
-    case "default":
+      return appendMemoryContract(buildGlm52SisyphusJuniorPrompt(useTaskSystem, promptAppend))
     default:
-      return buildDefaultSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return appendMemoryContract(buildDefaultSisyphusJuniorPrompt(useTaskSystem, promptAppend))
   }
 }
 

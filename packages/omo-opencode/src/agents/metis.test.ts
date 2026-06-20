@@ -7,8 +7,9 @@ describe("createMetisAgent K2.7 native prompt", () => {
     const agent = createMetisAgent("opencode-go/kimi-k2.7")
 
     // then
-    expect(agent.prompt).toBe(METIS_K2_7_SYSTEM_PROMPT)
+    expect(agent.prompt).toStartWith(METIS_K2_7_SYSTEM_PROMPT)
     expect(agent.prompt).toContain("running on Kimi K2.7")
+    expect(agent.prompt).toContain("Return durable learnings as memory candidates")
   })
 
   test("#given a k2p7 shorthand model #then uses the K2.7 Metis prompt", () => {
@@ -16,7 +17,8 @@ describe("createMetisAgent K2.7 native prompt", () => {
     const agent = createMetisAgent("kimi-for-coding/k2p7")
 
     // then
-    expect(agent.prompt).toBe(METIS_K2_7_SYSTEM_PROMPT)
+    expect(agent.prompt).toStartWith(METIS_K2_7_SYSTEM_PROMPT)
+    expect(agent.prompt).toContain("Blockers / Guardrails")
   })
 
   test("#given a non-K2.7 model #then uses the base prompt", () => {
@@ -25,8 +27,9 @@ describe("createMetisAgent K2.7 native prompt", () => {
     const sonnet = createMetisAgent("anthropic/claude-sonnet-4-6")
 
     // then
-    expect(k26.prompt).toBe(METIS_SYSTEM_PROMPT)
-    expect(sonnet.prompt).toBe(METIS_SYSTEM_PROMPT)
+    expect(k26.prompt).toStartWith(METIS_SYSTEM_PROMPT)
+    expect(sonnet.prompt).toStartWith(METIS_SYSTEM_PROMPT)
     expect(k26.prompt).not.toContain("running on Kimi K2.7")
+    expect(k26.prompt).toContain("Do not write MemPalace directly")
   })
 })

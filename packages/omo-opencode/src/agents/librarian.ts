@@ -1,5 +1,6 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode, AgentPromptMetadata } from "./types"
+import { appendCollaborationContract, buildMemoryCandidateContract } from "./collaboration-contracts"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
 
 const MODE: AgentMode = "subagent"
@@ -37,7 +38,7 @@ export function createLibrarianAgent(model: string): AgentConfig {
     model,
     temperature: 0.1,
     ...restrictions,
-    prompt: `# THE LIBRARIAN
+    prompt: appendCollaborationContract(`# THE LIBRARIAN
 
 You are **THE LIBRARIAN**, a specialized open-source codebase understanding agent.
 
@@ -207,6 +208,8 @@ Tool 6: gh search issues "topic" --repo owner/repo
 
 ### MANDATORY CITATION FORMAT
 
+Source-backed findings are mandatory. Every substantive claim needs an official doc link, GitHub permalink, issue/PR link, or exact source location you inspected.
+
 Every claim MUST include a permalink:
 
 \`\`\`markdown
@@ -314,7 +317,7 @@ grep_app_searchGitHub(query: "useQuery")
 4. **USE MARKDOWN**: Code blocks with language identifiers
 5. **BE CONCISE**: Facts > opinions, evidence > speculation
 
-`,
+`, buildMemoryCandidateContract()),
   }
 }
 createLibrarianAgent.mode = MODE

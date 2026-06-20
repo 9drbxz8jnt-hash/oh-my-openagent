@@ -1,6 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
-import type { AgentMode, AgentPromptMetadata } from "./types"
+import { appendCollaborationContract, buildMemoryCandidateContract } from "./collaboration-contracts"
 import { buildClaudeThinkingConfig, isKimiK27Model } from "./types"
+import type { AgentMode, AgentPromptMetadata } from "./types"
 import { buildAntiDuplicationSection } from "./dynamic-agent-prompt-builder"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
 
@@ -395,8 +396,19 @@ const metisRestrictions = createAgentToolRestrictions([
   "apply_patch",
 ])
 
+const METIS_COLLABORATION_CONTRACT = `${buildMemoryCandidateContract()}
+
+## Supervisor Planning Contract
+
+- Include a machine-checkable section titled \`Blockers / Guardrails\`.
+- List blockers that should stop Prometheus from writing the plan.
+- List guardrails that Prometheus must encode in the plan tasks.`
+
 export function createMetisAgent(model: string): AgentConfig {
-  const prompt = isKimiK27Model(model) ? METIS_K2_7_SYSTEM_PROMPT : METIS_SYSTEM_PROMPT
+  const prompt = appendCollaborationContract(
+    isKimiK27Model(model) ? METIS_K2_7_SYSTEM_PROMPT : METIS_SYSTEM_PROMPT,
+    METIS_COLLABORATION_CONTRACT,
+  )
   return {
     description:
       "Pre-planning consultant that analyzes requests to identify hidden intentions, ambiguities, and AI failure points. (Metis - OhMyOpenCode)",

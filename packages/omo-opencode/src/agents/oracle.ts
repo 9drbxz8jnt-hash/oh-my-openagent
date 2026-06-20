@@ -1,6 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk";
-import type { AgentMode, AgentPromptMetadata } from "./types";
+import { appendCollaborationContract, buildMemoryCandidateContract } from "./collaboration-contracts";
 import { buildClaudeThinkingConfig, isGpt5_5Model, isGptModel } from "./types";
+import type { AgentMode, AgentPromptMetadata } from "./types";
 import { createAgentToolRestrictions } from "../shared/permission-compat";
 
 const MODE: AgentMode = "subagent";
@@ -407,6 +408,14 @@ When the consulting agent continues the session with a follow-up question, answe
 If the follow-up contradicts what you recommended and you still believe the original recommendation, say so clearly and explain the disagreement. Your job is not to agree; it is to give the best recommendation.
 `;
 
+const ORACLE_COLLABORATION_CONTRACT = `${buildMemoryCandidateContract()}
+
+## Supervisor Verdict Contract
+
+- Include a machine-checkable line: \`Verdict: GO or NO-GO\`.
+- Use \`GO\` only when the consulting agent can proceed safely under the stated assumptions.
+- Use \`NO-GO\` when blockers, missing evidence, or unresolved risk should stop execution.`;
+
 
 export function createOracleAgent(model: string): AgentConfig {
   const restrictions = createAgentToolRestrictions([
@@ -423,13 +432,13 @@ export function createOracleAgent(model: string): AgentConfig {
     model,
     temperature: 0.1,
     ...restrictions,
-    prompt: ORACLE_DEFAULT_PROMPT,
+    prompt: appendCollaborationContract(ORACLE_DEFAULT_PROMPT, ORACLE_COLLABORATION_CONTRACT),
   } as AgentConfig;
 
   if (isGpt5_5Model(model)) {
     return {
       ...base,
-      prompt: ORACLE_GPT_5_5_PROMPT,
+      prompt: appendCollaborationContract(ORACLE_GPT_5_5_PROMPT, ORACLE_COLLABORATION_CONTRACT),
       reasoningEffort: "medium",
       textVerbosity: "high",
     } as AgentConfig;
@@ -438,7 +447,7 @@ export function createOracleAgent(model: string): AgentConfig {
   if (isGptModel(model)) {
     return {
       ...base,
-      prompt: ORACLE_GPT_PROMPT,
+      prompt: appendCollaborationContract(ORACLE_GPT_PROMPT, ORACLE_COLLABORATION_CONTRACT),
       reasoningEffort: "medium",
       textVerbosity: "high",
     } as AgentConfig;

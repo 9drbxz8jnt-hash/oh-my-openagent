@@ -1,11 +1,12 @@
-import { afterAll, describe, expect, test, beforeEach, afterEach, mock } from "bun:test"
-import { mkdirSync, rmSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
-import { tmpdir } from "node:os"
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { randomUUID } from "node:crypto"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { clearSessionAgent, setSessionAgent } from "../../features/claude-code-session-state"
 import { SYSTEM_DIRECTIVE_PREFIX } from "../../shared/system-directive"
 import { PLANNING_CONTEXT_OPEN } from "./constants"
-import { clearSessionAgent, setSessionAgent } from "../../features/claude-code-session-state"
+
 // Force stable (JSON) mode for tests that rely on message file storage
 mock.module("../../shared/opencode-storage-detection", () => ({
   isSqliteBackend: () => false,
@@ -90,7 +91,7 @@ describe("prometheus-md-only", () => {
       //#when //#then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should enforce md-only restriction for Prometheus display name Plan Builder", async () => {
@@ -109,7 +110,7 @@ describe("prometheus-md-only", () => {
       //#when //#then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should enforce md-only restriction for Prometheus display name Planner", async () => {
@@ -128,7 +129,7 @@ describe("prometheus-md-only", () => {
       //#when //#then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should enforce md-only restriction for uppercase PROMETHEUS", async () => {
@@ -147,7 +148,7 @@ describe("prometheus-md-only", () => {
       //#when //#then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should not enforce restriction for non-Prometheus agent", async () => {
@@ -209,7 +210,7 @@ describe("prometheus-md-only", () => {
       // when / #then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should allow Prometheus to write .md files inside .omo/", async () => {
@@ -271,6 +272,24 @@ describe("prometheus-md-only", () => {
       expect(output.message).toBeUndefined()
     })
 
+    test("should block Prometheus from writing .md files outside drafts and plans", async () => {
+      // given
+      const hook = createPrometheusMdOnlyHook(createMockPluginInput())
+      const input = {
+        tool: "Write",
+        sessionID: TEST_SESSION_ID,
+        callID: "call-1",
+      }
+      const output = {
+        args: { filePath: "/tmp/test/.omo/evidence/work-plan.md" },
+      }
+
+      // when / #then
+      await expect(
+        hook["tool.execute.before"](input, output)
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
+    })
+
     test("should block Prometheus from writing .md files outside .omo/", async () => {
       // given
       const hook = createPrometheusMdOnlyHook(createMockPluginInput())
@@ -286,7 +305,7 @@ describe("prometheus-md-only", () => {
       // when / #then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should block Prometheus from writing .md files when .omo is only part of a path segment", async () => {
@@ -304,7 +323,7 @@ describe("prometheus-md-only", () => {
       // when / #then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should block Prometheus from writing .md files under .omo-backup", async () => {
@@ -322,7 +341,7 @@ describe("prometheus-md-only", () => {
       // when / #then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should block Edit tool for non-.md files", async () => {
@@ -340,7 +359,7 @@ describe("prometheus-md-only", () => {
       // when / #then
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should allow bash commands from Prometheus", async () => {
@@ -622,7 +641,7 @@ describe("prometheus-md-only", () => {
       // when / then - should block because boulder says prometheus
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
 
     test("should fall back to message files when session not in boulder", async () => {
@@ -655,7 +674,7 @@ describe("prometheus-md-only", () => {
       // when / then - should block because falls back to message files (prometheus)
       await expect(
         hook["tool.execute.before"](input, output)
-      ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
     })
   })
 
@@ -757,7 +776,7 @@ describe("prometheus-md-only", () => {
        // when / #then
        await expect(
          hook["tool.execute.before"](input, output)
-       ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
      })
 
      test("should allow nested .omo directories (ctx.directory may be parent)", async () => {
@@ -795,7 +814,7 @@ describe("prometheus-md-only", () => {
        // when / #then
        await expect(
          hook["tool.execute.before"](input, output)
-       ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
      })
 
      test("should allow case-insensitive .OMO directory", async () => {
@@ -872,7 +891,7 @@ describe("prometheus-md-only", () => {
        // when / #then
        await expect(
          hook["tool.execute.before"](input, output)
-       ).rejects.toThrow("File operations restricted to .omo/*.md plan files only")
+      ).rejects.toThrow("File operations restricted to .omo/drafts/*.md and .omo/plans/*.md only")
      })
   })
 })

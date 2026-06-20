@@ -7,7 +7,7 @@ export const PROMETHEUS_AGENT = "prometheus"
 
 export const ALLOWED_EXTENSIONS = [".md"]
 
-export const ALLOWED_PATH_PREFIX = ".omo"
+export const ALLOWED_PATH_PREFIX = ".omo/drafts or .omo/plans"
 
 export const BLOCKED_TOOLS = ["Write", "Edit", "write", "edit"]
 
@@ -26,7 +26,7 @@ export const PLANNING_CONSULT_WARNING = `
 
 ${PLANNING_CONTEXT_OPEN}
 
-You are being invoked by ${getAgentDisplayName("prometheus")}, a planning agent restricted to .omo/*.md plan files only.
+You are being invoked by ${getAgentDisplayName("prometheus")}, a planning agent restricted to .omo/drafts/*.md and .omo/plans/*.md files only.
 
 **CRITICAL CONSTRAINTS:**
 - DO NOT modify any files (no Write, Edit, or any file mutations)
