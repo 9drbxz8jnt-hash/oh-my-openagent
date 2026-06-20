@@ -1,25 +1,26 @@
 import type { AvailableCategory } from "../agents/dynamic-agent-prompt-builder"
 import type { OhMyOpenCodeConfig } from "../config"
 import type { Managers } from "../create-managers"
-import type { SkillContext } from "./skill-context"
-import type { PluginContext, ToolsRecord } from "./types"
-import type { ToolRegistryFactories } from "./tool-registry-factories"
-
 import { isInteractiveBashEnabled } from "../interactive-bash-availability"
-import { filterDisabledTools } from "../shared/disabled-tools"
 import { log } from "../shared"
 import { normalizeToolArgSchemas } from "./normalize-tool-arg-schemas"
+import type { SkillContext } from "./skill-context"
 import { createCoreTools } from "./tool-registry-core-tools"
-import { defaultToolRegistryFactories } from "./tool-registry-factories"
+import { defaultToolRegistryFactories, type ToolRegistryFactories } from "./tool-registry-factories"
 import {
   createHashlineToolsRecord,
   createMonitorToolsRecord,
   createTaskToolsRecord,
-  getTaskSystemEnabled,
 } from "./tool-registry-gated-tools"
+import {
+  applyToolAvailabilityPolicy,
+  mergeToolCapabilityRecords,
+  resolveToolRegistryPolicy,
+} from "./tool-registry-policy"
 import { createTeamModeToolsRecord } from "./tool-registry-team-tools"
+import type { PluginContext, ToolsRecord } from "./types"
+
 export { trimToolsToCap } from "./tool-registry-trimming"
-import { trimToolsToCap } from "./tool-registry-trimming"
 
 export type ToolRegistryResult = {
   filteredTools: ToolsRecord
@@ -48,9 +49,14 @@ export function createToolRegistry(args: {
     ...defaultToolRegistryFactories,
     ...toolFactories,
   }
-  const taskSystemEnabled = getTaskSystemEnabled(pluginConfig)
-  const allTools = {
-    ...createCoreTools({
+  const policy = resolveToolRegistryPolicy({
+    pluginConfig,
+    interactiveBashEnabled,
+    hasMonitorManager: Boolean(managers.monitorManager),
+  })
+  const taskSystemEnabled = policy.taskSystemEnabled
+  const allTools = mergeToolCapabilityRecords({
+    core: createCoreTools({
       ctx,
       pluginConfig,
       managers,
@@ -58,12 +64,12 @@ export function createToolRegistry(args: {
       availableCategories,
       factories,
     }),
-    ...(interactiveBashEnabled ? { interactive_bash: factories.interactive_bash } : {}),
-    ...createTeamModeToolsRecord({ pluginConfig, ctx, managers, factories }),
-    ...createMonitorToolsRecord({ pluginConfig, ctx, managers, factories }),
-    ...createTaskToolsRecord({ taskSystemEnabled, pluginConfig, ctx, factories }),
-    ...createHashlineToolsRecord({ pluginConfig, ctx, factories }),
-  }
+    interactive_bash: policy.includeInteractiveBash ? { interactive_bash: factories.interactive_bash } : {},
+    team_mode: policy.includeTeamModeTools ? createTeamModeToolsRecord({ pluginConfig, ctx, managers, factories }) : {},
+    monitor: policy.includeMonitorTools ? createMonitorToolsRecord({ pluginConfig, ctx, managers, factories }) : {},
+    task_system: createTaskToolsRecord({ taskSystemEnabled, pluginConfig, ctx, factories }),
+    hashline: policy.includeHashlineTools ? createHashlineToolsRecord({ pluginConfig, ctx, factories }) : {},
+  })
 
   const allToolNames = Object.keys(allTools)
   const teamToolCount = allToolNames.filter((toolName) => toolName.startsWith("team_")).length
@@ -77,12 +83,7 @@ export function createToolRegistry(args: {
     normalizeToolArgSchemas(toolDefinition)
   }
 
-  const filteredTools: ToolsRecord = filterDisabledTools(allTools, pluginConfig.disabled_tools)
-
-  const maxTools = pluginConfig.experimental?.max_tools
-  if (maxTools) {
-    trimToolsToCap(filteredTools, maxTools)
-  }
+  const filteredTools: ToolsRecord = applyToolAvailabilityPolicy(allTools, policy)
 
   return {
     filteredTools,
