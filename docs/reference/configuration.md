@@ -30,6 +30,7 @@ Complete reference for Oh My OpenCode plugin configuration. During the rename tr
   - [LSP](#lsp)
 - [Advanced](#advanced)
   - [Runtime Fallback](#runtime-fallback)
+  - [Runtime Memory and Evidence](#runtime-memory-and-evidence)
   - [Model Capabilities](#model-capabilities)
   - [Hashline Edit](#hashline-edit)
   - [Experimental](#experimental)
@@ -690,6 +691,18 @@ Auto-switches to backup models on API errors.
 | `timeout_seconds`       | `30`                | Seconds before forcing next fallback. **Set to `0` to disable timeout-based escalation and `message.updated` provider retry signal detection.** Structured `session.status` retry events can still trigger fallback. |
 | `notify_on_fallback`    | `true`              | Toast notification on model switch                                                                                             |
 
+Live parent-wake routing uses the running OpenCode server when it is healthy. The route probes `/global/health`, caches availability, and times out quickly. If the route is disabled, unavailable, running in a child context, or no server is present, OmO falls back to the bounded in-process route instead of blocking the hot path.
+
+Set `experimental.disable_live_parent_wake_routing` to `true` to disable live parent-wake routing and use the in-process route fallback. This flag disables live parent-wake routing for the supervisor path and keeps the bounded in-process route fallback active:
+
+```jsonc
+{
+  "experimental": {
+    "disable_live_parent_wake_routing": true
+  }
+}
+```
+
 #### Speeding Up Fallback (Proxy APIs)
 
 If you are using a proxy API provider, they may return different error codes (e.g., `401`, `403`, `404`) for quota exhaustion or model unavailability. To make fallback trigger instantly without waiting for long timeouts:
@@ -913,6 +926,14 @@ This final example is a **complete shape reference**. In real configs, prefer pr
 - use `thinking` for Anthropic thinking-capable models
 - use `variant`, `temperature`, `top_p`, and `maxTokens` only when that fallback model supports them
 
+### Runtime Memory and Evidence
+
+OmO keeps local `.omo` state as the execution and evidence source of truth. Runtime work plans, loop state, and QA artifacts should stay under `.omo/`, with evidence recorded under `.omo/evidence/<date-slug>/` for each change.
+
+MemPalace is optional fallback memory. It can store durable cross-session facts, but it is not required for the runtime supervisor to execute work. Parent sessions and Sisyphus own durable memory decisions. Subagents should return memory candidates to the parent instead of writing durable memory themselves.
+
+The hot path is bounded. When live routing or external memory is unavailable, OmO should keep execution moving through local state and the in-process route fallback rather than waiting on an optional service.
+
 ### Model Capabilities
 
 OmO can refresh a local models.dev capability snapshot on startup. This cache is controlled by `model_capabilities`.
@@ -959,6 +980,7 @@ When enabled, OmO registers the hash-anchored `edit` tool and activates the `has
     "truncate_all_tool_outputs": false,
     "aggressive_truncation": false,
     "disable_omo_env": false,
+    "disable_live_parent_wake_routing": false,
     "task_system": true,
     "dynamic_context_pruning": {
       "enabled": false,
@@ -988,6 +1010,7 @@ When enabled, OmO registers the hash-anchored `edit` tool and activates the `has
 | `truncate_all_tool_outputs`              | `false`    | Truncate all tool outputs (not just whitelisted)                                     |
 | `aggressive_truncation`                  | `false`    | Aggressively truncate when token limit exceeded                                      |
 | `disable_omo_env`                        | `false`    | Disable auto-injected `<omo-env>` block (date/time/locale). Improves cache hit rate. |
+| `disable_live_parent_wake_routing`        | `false`    | Disable live parent-wake routing and use the in-process route fallback               |
 | `task_system`                            | `false`    | Enable Sisyphus task system                                                          |
 | `dynamic_context_pruning.enabled`        | `false`    | Auto-prune old tool outputs to manage context window                                 |
 | `dynamic_context_pruning.notification`   | `detailed` | Pruning notifications: `off` / `minimal` / `detailed`                                |

@@ -34,6 +34,8 @@ bunx oh-my-opencode
 | `uninstall` / `cleanup` | Remove managed Codex Light state |
 | `doctor` | Installation health diagnostics |
 | `run <message>` | Non-interactive OpenCode session runner with completion enforcement |
+| `sparkshell [args...]` | Run Codex Light sparkshell for bounded command output capture and condensation |
+| `ulw-loop [args...]` | Run the Codex Light ulw-loop component from the installed Codex plugin runtime |
 | `get-local-version` | Show current installed version and check for updates |
 | `refresh-model-capabilities` | Refresh cached model capabilities snapshot from models.dev |
 | `boulder` | Inspect Sisyphus boulder work-state (active plan, per-task timers, session lineage) |
@@ -193,6 +195,48 @@ bunx oh-my-openagent get-local-version
 | --- | --- |
 | `-d, --directory <path>` | Working directory used for plugin/config detection |
 | `--json` | Output JSON for scripting |
+
+---
+
+## sparkshell
+
+Runs the Codex Light sparkshell command surface. Use it when a shell command may produce too much output and you want bounded output, optional JSON, tmux tail capture, or a shell string passthrough.
+
+### Usage
+
+```bash
+omo sparkshell <command> [args...]
+omo sparkshell [--json] [--budget <chars>] <command> [args...]
+omo sparkshell --shell '<shell command>'
+omo sparkshell --tmux-pane <pane-id> [--tail-lines <100-1000>]
+```
+
+### Notes
+
+- `--budget <chars>` controls the output budget for command capture.
+- `--json` prints structured output for agent tooling.
+- `--shell` runs one shell command string.
+- `--tmux-pane` reads from an existing tmux pane, with `--tail-lines` bounded from 100 to 1000.
+
+---
+
+## ulw-loop
+
+Runs the Codex Light ulw-loop component from the installed or cached Codex plugin runtime.
+
+### Usage
+
+```bash
+omo ulw-loop [args...]
+```
+
+### Notes
+
+The CLI resolves `omo-ulw-loop` from the installed or cached Codex component runtime. If the Codex Light component is missing, it prints:
+
+```text
+Codex ulw-loop is not installed. Run: npx lazycodex-ai@latest install --no-tui
+```
 
 ---
 

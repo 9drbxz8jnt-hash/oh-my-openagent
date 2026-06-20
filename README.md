@@ -159,11 +159,21 @@ curl -fsSL https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/refs/h
 
 The guide covers: platform selection, the subscription interview, provider authentication (Anthropic / Gemini / Copilot / Z.ai / OpenCode Zen), the agent-to-model matching matrix, modes (`ultrawork`, `search`, `analyze`, `team`, `hyperplan`), slash commands, the Light edition's 8 Codex components, Team Mode, and uninstall. Don't summarize it; read it end to end.
 
-### Note on package and command names
+### Compatibility matrix
 
-The published npm package and CLI binary are still named `oh-my-opencode` (dual-published as `oh-my-openagent` during the rename transition). Inside `opencode.json`, the compatibility layer prefers the plugin entry `oh-my-openagent`, while legacy `oh-my-opencode` entries still load with a warning. Plugin config files still commonly use `oh-my-opencode.json[c]`; both legacy and renamed basenames are recognized.
+During the rename and multi-harness transition, several names still work. Use this table as the source of truth.
 
-The recommended `bunx`/`npx` invocation is `oh-my-openagent install` (or the original `oh-my-opencode install`). The package also ships `omo` as a bin alias, but **do not** use `bunx omo` or `npx omo` — `omo` is a different, unrelated npm package by a different author, and the package manager may resolve the wrong one. `lazycodex-ai` is a single-purpose Node/npm installer package: `npx lazycodex-ai install` routes directly to the Codex Light installer. It is not the Codex marketplace name (the marketplace repository is `code-yeongyu/lazycodex`). Codex sees marketplace `sisyphuslabs` and plugin `omo`, enabled as `omo@sisyphuslabs`.
+| Name or alias | What it means now | Compatibility behavior |
+| --- | --- | --- |
+| `oh-my-openagent` | Preferred product, package, CLI, and OpenCode plugin identity | Use this for new installs and plugin registration |
+| `oh-my-opencode` | Legacy package, CLI, and OpenCode plugin identity | Still accepted during the rename transition and may warn when loaded as a legacy plugin |
+| `omo` | Short CLI bin shipped by this package | Safe after this package is installed locally. Avoid `bunx omo` or `npx omo` because `omo` is a different npm package |
+| `lazycodex-ai` | npm/bin alias for the Codex Light installer | `npx lazycodex-ai install` routes to the Codex Light installer |
+| `lazycodex` | Marketplace repository name, not the live npm package | Refers to `code-yeongyu/lazycodex`; use `lazycodex-ai` for npm installs |
+| `sisyphuslabs/omo` and `omo@sisyphuslabs` | Codex marketplace `sisyphuslabs`, plugin `omo` | Codex enables the Light plugin as `omo@sisyphuslabs` |
+| `oh-my-openagent.json[c]` | Preferred config basename | Recognized in user config and walked project `.opencode/` configs |
+| `oh-my-opencode.json[c]` | Legacy config basename | Still recognized during the compatibility window |
+| Atlas legacy aliases | `orchestrator-sisyphus`, display variant `Atlas`, and hook `sisyphus-orchestrator` | These map to `atlas`. Atlas remains supported in this release |
 
 ### Telemetry
 
