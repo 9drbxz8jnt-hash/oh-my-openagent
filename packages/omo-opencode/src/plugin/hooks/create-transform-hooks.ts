@@ -3,6 +3,7 @@ import type { MonitorManager } from "../../features/monitor"
 import type { PluginContext } from "../types"
 import type { RalphLoopHook } from "../../hooks/ralph-loop"
 
+import { findProjectRoot } from "@oh-my-opencode/rules-engine"
 import {
   createClaudeCodeHooksHook,
   createKeywordDetectorHook,
@@ -15,6 +16,7 @@ import {
   contextCollector,
   createContextInjectorMessagesTransformHook,
 } from "../../features/context-injector"
+import type { WorkspaceMemoryReader } from "../../features/context-injector"
 import { safeCreateHook } from "../../shared/safe-create-hook"
 
 export type TransformHooks = {
@@ -34,8 +36,9 @@ export function createTransformHooks(args: {
   safeHookEnabled?: boolean
   ralphLoop?: RalphLoopHook | null
   monitorManager?: MonitorManager
+  workspaceMemoryReader?: WorkspaceMemoryReader
 }): TransformHooks {
-  const { ctx, pluginConfig, isHookEnabled, ralphLoop, monitorManager } = args
+  const { ctx, pluginConfig, isHookEnabled, ralphLoop, monitorManager, workspaceMemoryReader } = args
   const safeHookEnabled = args.safeHookEnabled ?? true
 
   const claudeCodeHooks = isHookEnabled("claude-code-hooks")
@@ -70,7 +73,11 @@ export function createTransformHooks(args: {
     : null
 
   const contextInjectorMessagesTransform =
-    createContextInjectorMessagesTransformHook(contextCollector)
+    createContextInjectorMessagesTransformHook(
+      contextCollector,
+      findProjectRoot(ctx.directory) ?? ctx.directory,
+      workspaceMemoryReader,
+    )
 
   const teamModeConfig = pluginConfig.team_mode
 

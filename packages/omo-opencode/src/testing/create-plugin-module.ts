@@ -1,22 +1,22 @@
 import type { Hooks, Plugin, PluginModule } from "@opencode-ai/plugin"
-import type { HookName } from "../config"
-import { initConfigContext } from "../cli/config-manager/config-context"
 import { ensureTuiPluginEntry } from "../cli/config-manager/add-tui-plugin-to-tui-config"
-
+import { initConfigContext } from "../cli/config-manager/config-context"
+import type { HookName } from "../config"
 import { createHooks } from "../create-hooks"
 import { createManagers } from "../create-managers"
 import { createRuntimeTmuxConfig, isTmuxIntegrationEnabled } from "../create-runtime-tmux-config"
 import { createTools } from "../create-tools"
+import type { WorkspaceMemoryReader } from "../features/context-injector"
 import { createRuntimeSkillSourceServer, selectRuntimeSecuritySkills } from "../features/opencode-runtime-skills"
 import { initializeOpenClaw } from "../openclaw"
+import { loadPluginConfig } from "../plugin-config"
 import { createPluginDispose } from "../plugin-dispose"
 import { createPluginInterface } from "../plugin-interface"
-import { loadPluginConfig } from "../plugin-config"
 import { createModelCacheState } from "../plugin-state"
 import {
+  type CompactionAutocontinueHook,
   createCompactionAutocontinueHandler,
   createSessionCompactingHandler,
-  type CompactionAutocontinueHook,
 } from "../plugin/session-compacting"
 import { installAgentSortShim, setAgentSortOrder } from "../shared/agent-sort-shim"
 import {
@@ -27,15 +27,15 @@ import {
 } from "../shared/external-plugin-detector"
 import { createFirstMessageVariantGate } from "../shared/first-message-variant"
 import { initI18n } from "../shared/i18n"
-import { log } from "../shared/logger"
-import { logLegacyPluginStartupWarning } from "../shared/log-legacy-plugin-startup-warning"
 import { migrateLegacyWorkspaceDirectory } from "../shared/legacy-workspace-migration"
-import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
 import {
   initLiveServerRoute,
   setLiveParentWakeRoutingDisabled,
   warmLiveServerProbe,
 } from "../shared/live-server-route"
+import { logLegacyPluginStartupWarning } from "../shared/log-legacy-plugin-startup-warning"
+import { log } from "../shared/logger"
+import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
 import { startBackgroundCheck as startTmuxCheck } from "../tools/interactive-bash"
 
 type HooksWithRuntimeLifecycle = Hooks & {
@@ -69,6 +69,7 @@ export type PluginModuleDeps = {
   createManagers: typeof createManagers
   createTools: typeof createTools
   createRuntimeSkillSourceServer: typeof createRuntimeSkillSourceServer
+  workspaceMemoryReader?: WorkspaceMemoryReader
   createHooks: typeof createHooks
   createPluginInterface: typeof createPluginInterface
 }
@@ -99,6 +100,7 @@ const defaultPluginModuleDeps: PluginModuleDeps = {
   createManagers,
   createTools,
   createRuntimeSkillSourceServer,
+  workspaceMemoryReader: undefined,
   createHooks,
   createPluginInterface,
 }
@@ -213,6 +215,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       backgroundManager: managers.backgroundManager,
       modelFallbackControllerAccessor: managers.modelFallbackControllerAccessor,
       monitorManager: managers.monitorManager,
+      workspaceMemoryReader: deps.workspaceMemoryReader,
       isHookEnabled,
       safeHookEnabled,
       mergedSkills: toolsResult.mergedSkills,

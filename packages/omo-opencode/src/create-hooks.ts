@@ -2,6 +2,7 @@ import type { AvailableSkill } from "./agents/dynamic-agent-prompt-builder"
 import type { HookName, OhMyOpenCodeConfig } from "./config"
 import type { LoadedSkill } from "./features/opencode-skill-loader/types"
 import type { BackgroundManager } from "./features/background-agent"
+import type { WorkspaceMemoryReader } from "./features/context-injector"
 import type { MonitorManager } from "./features/monitor"
 import type { ModelFallbackControllerAccessor } from "./hooks/model-fallback"
 import type { PluginContext } from "./plugin/types"
@@ -40,6 +41,7 @@ export function createHooks(args: {
   backgroundManager: BackgroundManager
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   monitorManager?: MonitorManager
+  workspaceMemoryReader?: WorkspaceMemoryReader
   isHookEnabled: (hookName: HookName) => boolean
   safeHookEnabled: boolean
   mergedSkills: LoadedSkill[]
@@ -52,6 +54,7 @@ export function createHooks(args: {
     backgroundManager,
     modelFallbackControllerAccessor,
     monitorManager,
+    workspaceMemoryReader,
     isHookEnabled,
     safeHookEnabled,
     mergedSkills,
@@ -65,6 +68,7 @@ export function createHooks(args: {
     backgroundManager,
     modelFallbackControllerAccessor,
     monitorManager,
+    workspaceMemoryReader,
     isHookEnabled,
     safeHookEnabled,
   })

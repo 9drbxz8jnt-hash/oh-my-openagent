@@ -1,7 +1,9 @@
 import type { Message, Part } from "@opencode-ai/sdk"
-import { isRealUserMessage, isRealUserTextPart, log } from "../../shared"
-import { getMainSessionID } from "../claude-code-session-state"
 import type { ContextCollector } from "./collector"
+import type { WorkspaceMemoryReader } from "./workspace-awareness"
+import { isRealUserMessage, isRealUserTextPart, log } from "../../shared"
+import { buildWorkspaceAwarenessPacket } from "./workspace-awareness"
+import { getMainSessionID } from "../claude-code-session-state"
 
 interface OutputPart {
   type: string
@@ -87,9 +89,34 @@ function hasText(part: Part): boolean {
   return "text" in part && typeof part.text === "string" && part.text.length > 0
 }
 
+function getWorkspaceRootFromMessageInfo(info: Message): string | undefined {
+  if (!("path" in info)) {
+    return undefined
+  }
+
+  const path = info.path as { root?: unknown; cwd?: unknown } | undefined
+  if (!path) {
+    return undefined
+  }
+
+  if (typeof path.root === "string" && path.root.length > 0) {
+    return path.root
+  }
+
+  if (typeof path.cwd === "string" && path.cwd.length > 0) {
+    return path.cwd
+  }
+
+  return undefined
+}
+
 export function createContextInjectorMessagesTransformHook(
-  collector: ContextCollector
+  collector: ContextCollector,
+  defaultWorkspaceRoot = process.cwd(),
+  memoryReader?: WorkspaceMemoryReader,
 ): MessagesTransformHook {
+  const preparedWorkspaceSessions = new Set<string>()
+
   return {
     "experimental.chat.messages.transform": async (_input, output) => {
       const { messages } = output
@@ -126,6 +153,54 @@ export function createContextInjectorMessagesTransformHook(
         return
       }
 
+      const mainSessionID = getMainSessionID()
+      const workspaceRoot = getWorkspaceRootFromMessageInfo(lastUserMessage.info) ?? defaultWorkspaceRoot
+      if (
+        workspaceRoot &&
+        mainSessionID !== undefined &&
+        sessionID === mainSessionID &&
+        !preparedWorkspaceSessions.has(sessionID)
+      ) {
+        preparedWorkspaceSessions.add(sessionID)
+
+        try {
+          const packet = await buildWorkspaceAwarenessPacket({
+            sessionID,
+            workspaceRoot,
+            memoryReader,
+          })
+
+          if (packet.memoryTimedOut) {
+            log("[context-injector] Workspace memory lookup timed out; continuing without memory", {
+              sessionID,
+              workspaceRoot,
+            })
+          }
+
+          if (packet.hasContent) {
+            collector.register(sessionID, {
+              id: `workspace-awareness:${sessionID}`,
+              source: "custom",
+              content: packet.content,
+              priority: "low",
+              metadata: {
+                kind: "workspace-awareness",
+                workspaceRoot,
+                memoryTimedOut: packet.memoryTimedOut,
+                memoryFactsUsed: packet.memoryFactsUsed,
+                truncated: packet.truncated,
+              },
+            })
+          }
+        } catch (error) {
+          log("[context-injector] Workspace awareness build failed; continuing without packet", {
+            sessionID,
+            workspaceRoot,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+
       const hasPending = collector.hasPending(sessionID)
       if (!hasPending) {
         return
@@ -148,14 +223,14 @@ export function createContextInjectorMessagesTransformHook(
         return
       }
 
-      const syntheticPart = {
-        id: `prt_synthetic_hook_${sessionID}`,
-        messageID: lastUserMessage.info.id,
-        sessionID: messageSessionID ?? "",
-        type: "text" as const,
-        text: pending.merged,
-        synthetic: true,
-      }
+          const syntheticPart = {
+            id: `prt_synthetic_hook_${sessionID}`,
+            messageID: lastUserMessage.info.id,
+            sessionID,
+            type: "text" as const,
+            text: pending.merged,
+            synthetic: true,
+          }
 
       lastUserMessage.parts.splice(textPartIndex, 0, syntheticPart as Part)
 

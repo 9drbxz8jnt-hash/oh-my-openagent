@@ -1,5 +1,6 @@
 import type { HookName, OhMyOpenCodeConfig } from "../../config"
 import type { BackgroundManager } from "../../features/background-agent"
+import type { WorkspaceMemoryReader } from "../../features/context-injector"
 import type { MonitorManager } from "../../features/monitor"
 import type { ModelFallbackControllerAccessor } from "../../hooks/model-fallback"
 import type { PluginContext } from "../types"
@@ -16,10 +17,11 @@ export function createCoreHooks(args: {
   backgroundManager: BackgroundManager
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   monitorManager?: MonitorManager
+  workspaceMemoryReader?: WorkspaceMemoryReader
   isHookEnabled: (hookName: HookName) => boolean
   safeHookEnabled: boolean
 }) {
-  const { ctx, pluginConfig, modelCacheState, backgroundManager, modelFallbackControllerAccessor, monitorManager, isHookEnabled, safeHookEnabled } = args
+  const { ctx, pluginConfig, modelCacheState, backgroundManager, modelFallbackControllerAccessor, monitorManager, workspaceMemoryReader, isHookEnabled, safeHookEnabled } = args
 
   const session = createSessionHooks({
     ctx,
@@ -46,6 +48,7 @@ export function createCoreHooks(args: {
     safeHookEnabled,
     ralphLoop: session.ralphLoop,
     monitorManager,
+    workspaceMemoryReader,
   })
 
   return {

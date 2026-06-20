@@ -7,6 +7,17 @@ import {
   createContextInjectorMessagesTransformHook,
 } from "./injector"
 
+function getMessagesTransformHook(
+  hook: ReturnType<typeof createContextInjectorMessagesTransformHook>,
+) {
+  const transform = hook["experimental.chat.messages.transform"]
+  if (!transform) {
+    throw new Error("Expected experimental.chat.messages.transform to exist")
+  }
+
+  return transform
+}
+
 describe("createContextInjectorMessagesTransformHook", () => {
   let collector: ContextCollector
 
@@ -59,7 +70,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     const output = unsafeTestValue({ messages })
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, output)
+    await getMessagesTransformHook(hook)({}, output)
 
     // then - synthetic part inserted before original text part
     expect(output.messages.length).toBe(3)
@@ -85,7 +96,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     }
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, firstOutput)
+    await getMessagesTransformHook(hook)({}, firstOutput)
 
     // then
     const firstSyntheticPart = firstOutput.messages[0].parts[0]
@@ -104,7 +115,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     }
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, secondOutput)
+    await getMessagesTransformHook(hook)({}, secondOutput)
 
     // then
     const secondSyntheticPart = secondOutput.messages[0].parts[0]
@@ -125,7 +136,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     const output = unsafeTestValue({ messages })
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, output)
+    await getMessagesTransformHook(hook)({}, output)
 
     // then
     expect(output.messages.length).toBe(1)
@@ -145,7 +156,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     const output = unsafeTestValue({ messages })
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, output)
+    await getMessagesTransformHook(hook)({}, output)
 
     // then
     expect(output.messages.length).toBe(1)
@@ -191,7 +202,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     const output = unsafeTestValue({ messages })
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, output)
+    await getMessagesTransformHook(hook)({}, output)
 
     // then
     expect(output.messages).toEqual(originalMessages)
@@ -219,7 +230,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     const output = unsafeTestValue({ messages })
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, output)
+    await getMessagesTransformHook(hook)({}, output)
 
     // then
     expect(output.messages).toEqual(originalMessages)
@@ -240,7 +251,7 @@ describe("createContextInjectorMessagesTransformHook", () => {
     const output = unsafeTestValue({ messages })
 
     // when
-    await hook["experimental.chat.messages.transform"]!({}, output)
+    await getMessagesTransformHook(hook)({}, output)
 
     // then
     expect(collector.hasPending(sessionID)).toBe(false)

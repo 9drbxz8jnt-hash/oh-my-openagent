@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, mock } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { getLocale, initI18n, t } from "../shared/i18n"
+import type { WorkspaceMemoryReader } from "../features/context-injector"
 import { PLUGIN_NAME } from "../shared"
+import { getLocale, initI18n, t } from "../shared/i18n"
 import { createPluginModule } from "./create-plugin-module"
 
 const sourcePlugin = new URL("../index.ts", import.meta.url).href
@@ -45,6 +46,12 @@ const mockCreateRuntimeSkillSourceServer = mock(
     stop: mockRuntimeSkillSourceStop,
   }),
 )
+const mockWorkspaceMemoryReader = mock(async () => [
+  {
+    source: "mempalace",
+    content: "Durable fact from memory",
+  },
+]) as unknown as WorkspaceMemoryReader
 const mockCreateTools = mock(async () => ({
   mergedSkills: [],
   availableSkills: [],
@@ -70,7 +77,9 @@ const mockCreateFirstMessageVariantGate = mock(() => ({
   clear: () => {},
 }))
 
-function createTestPluginModule(): ReturnType<typeof createPluginModule> {
+function createTestPluginModule(
+  overrides: { workspaceMemoryReader?: WorkspaceMemoryReader } = {},
+): ReturnType<typeof createPluginModule> {
   return createPluginModule({
     initConfigContext: mockInitConfigContext,
     detectExternalSkillPlugin: mockDetectExternalSkillPlugin,
@@ -85,6 +94,7 @@ function createTestPluginModule(): ReturnType<typeof createPluginModule> {
     createRuntimeTmuxConfig: mockCreateRuntimeTmuxConfig as never,
     createManagers: mockCreateManagers as never,
     createRuntimeSkillSourceServer: mockCreateRuntimeSkillSourceServer as never,
+    workspaceMemoryReader: overrides.workspaceMemoryReader,
     createTools: mockCreateTools as never,
     createHooks: mockCreateHooks as never,
     createPluginInterface: mockCreatePluginInterface as never,
@@ -268,6 +278,24 @@ describe("createPluginModule()", () => {
 
       // then
       expect(mockRuntimeSkillSourceStop).toHaveBeenCalledTimes(1)
+    })
+
+    it("#given a workspace memory reader override #then startup threads it into the hook factory", async () => {
+      // given
+      const pluginModule = createTestPluginModule({
+        workspaceMemoryReader: mockWorkspaceMemoryReader,
+      })
+      mockLoadPluginConfig.mockReturnValue({})
+
+      // when
+      await pluginModule.server({
+        directory: "/tmp/project",
+        client: {},
+      } as Parameters<typeof pluginModule.server>[0])
+
+      // then
+      const hookArgs = mockCreateHooks.mock.calls.at(0)?.[0]
+      expect(hookArgs?.workspaceMemoryReader).toBe(mockWorkspaceMemoryReader)
     })
   })
 
