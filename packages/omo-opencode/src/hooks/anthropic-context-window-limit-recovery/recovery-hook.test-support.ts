@@ -1,6 +1,7 @@
 import { mock } from "bun:test"
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { OhMyOpenCodeConfig } from "../../config"
+import { MemoryConfigSchema } from "../../config/schema/memory-config"
 import { createAnthropicContextWindowLimitRecoveryHook } from "./recovery-hook"
 
 type ExecuteCompactFn = typeof import("./executor").executeCompact
@@ -33,6 +34,7 @@ export const parseAnthropicTokenLimitErrorMock = mock<ParseAnthropicTokenLimitEr
 }))
 
 const pluginConfig = {
+  memory: MemoryConfigSchema.parse({}),
   git_master: {
     commit_footer: false,
     include_co_authored_by: false,
