@@ -6540,6 +6540,99 @@
       ],
       "additionalProperties": false
     },
+    "memory": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "local_workspace": {
+          "default": {
+            "enabled": true
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "additionalProperties": false
+        },
+        "mempalace": {
+          "default": {
+            "enabled": false,
+            "timeout_ms": 200,
+            "mode": "optional"
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "timeout_ms": {
+              "default": 200,
+              "type": "integer",
+              "minimum": 25,
+              "maximum": 2000
+            },
+            "mode": {
+              "default": "optional",
+              "type": "string",
+              "const": "optional"
+            }
+          },
+          "required": [
+            "enabled",
+            "timeout_ms",
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "auto_write": {
+          "default": {
+            "objective_facts": true,
+            "subjective_or_personal": false
+          },
+          "type": "object",
+          "properties": {
+            "objective_facts": {
+              "default": true,
+              "type": "boolean"
+            },
+            "subjective_or_personal": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "objective_facts",
+            "subjective_or_personal"
+          ],
+          "additionalProperties": false
+        },
+        "conflict_policy": {
+          "default": "user_prompt_then_local_execution_then_mempalace_preferences",
+          "type": "string",
+          "enum": [
+            "user_prompt_then_local_execution_then_mempalace_preferences"
+          ]
+        }
+      },
+      "required": [
+        "enabled",
+        "local_workspace",
+        "mempalace",
+        "auto_write",
+        "conflict_policy"
+      ],
+      "additionalProperties": false
+    },
     "codegraph": {
       "type": "object",
       "properties": {
@@ -6903,6 +6996,7 @@
     }
   },
   "required": [
+    "memory",
     "git_master"
   ],
   "additionalProperties": false

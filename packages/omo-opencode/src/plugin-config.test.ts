@@ -422,6 +422,22 @@ describe("parseConfigPartially", () => {
           include_co_authored_by: true,
           git_env_prefix: "GIT_MASTER=1",
         },
+        memory: {
+          enabled: false,
+          local_workspace: {
+            enabled: true,
+          },
+          mempalace: {
+            enabled: false,
+            timeout_ms: 200,
+            mode: "optional",
+          },
+          auto_write: {
+            objective_facts: true,
+            subjective_or_personal: false,
+          },
+          conflict_policy: "user_prompt_then_local_execution_then_mempalace_preferences",
+        },
         tui: {
           sidebar: {
             enabled: true,
