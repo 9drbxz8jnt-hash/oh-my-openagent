@@ -1,6 +1,10 @@
 import type { Hooks } from "@opencode-ai/plugin"
 
 import { isCompactionAgent } from "../shared/compaction-marker"
+import {
+  buildCompactionLifecycleMemoryCandidate,
+  type LifecycleMemoryCandidateRecorder,
+} from "../shared/lifecycle-memory-candidate"
 import { log } from "../shared/logger"
 
 type SessionCompactingHook = NonNullable<Hooks["experimental.session.compacting"]>
@@ -27,6 +31,11 @@ export type CompactionAutocontinueHook = (
 
 type CompactionAutocontinueHandlerOptions = {
   readonly duplicateGuardMs?: number
+  readonly lifecycleMemoryRecorder?: LifecycleMemoryCandidateRecorder
+}
+
+type SessionCompactingHandlerOptions = {
+  readonly lifecycleMemoryRecorder?: LifecycleMemoryCandidateRecorder
 }
 
 type TimerHandleWithOptionalUnref = ReturnType<typeof setTimeout> & {
@@ -96,6 +105,7 @@ function unrefTimer(timer: TimerHandleWithOptionalUnref, sessionID: string): voi
 
 export function createSessionCompactingHandler(
   hooks: CompactionHookDependencies,
+  options: SessionCompactingHandlerOptions = {},
 ): SessionCompactingHook {
   return async (
     input: SessionCompactingInput,
@@ -122,6 +132,14 @@ export function createSessionCompactingHandler(
       if (context) {
         output.context.push(context)
       }
+    })
+    await runCompactionStep("lifecycleMemory.compact", input.sessionID, async () => {
+      const recorder = options.lifecycleMemoryRecorder
+      if (!recorder) return
+      await recorder.record(buildCompactionLifecycleMemoryCandidate({
+        sessionID: input.sessionID,
+        phase: "compact",
+      }))
     })
   }
 }
@@ -176,6 +194,15 @@ export function createCompactionAutocontinueHandler(
       if (restore) {
         await restore(input.sessionID)
       }
+    })
+    await runCompactionStep("lifecycleMemory.recovery", input.sessionID, async () => {
+      const recorder = options.lifecycleMemoryRecorder
+      if (!recorder) return
+      await recorder.record(buildCompactionLifecycleMemoryCandidate({
+        sessionID: input.sessionID,
+        phase: "recovery",
+        agent: input.agent,
+      }))
     })
   }
 }

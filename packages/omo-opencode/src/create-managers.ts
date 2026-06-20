@@ -1,24 +1,25 @@
 import type { OhMyOpenCodeConfig } from "./config"
-import type { ModelCacheState } from "./plugin-state"
-import type { PluginContext, TmuxConfig } from "./plugin/types"
-
-import type { SubagentSessionCreatedEvent } from "./features/background-agent"
-import { BackgroundManager } from "./features/background-agent"
+import { BackgroundManager, type SubagentSessionCreatedEvent } from "./features/background-agent"
+import { registerManagerForCleanup } from "./features/background-agent/process-cleanup"
 import type { MonitorManager } from "./features/monitor"
 import { createMonitorManager } from "./features/monitor"
 import { SkillMcpManager } from "./features/skill-mcp-manager"
+import { initTaskToastManager } from "./features/task-toast-manager"
 import { cleanupSessionTeamRuns } from "./features/team-mode/team-runtime/session-cleanup"
 import { lookupTeamSession } from "./features/team-mode/team-session-registry"
-import { TuiStateMirror } from "./features/tui-sidebar/mirror-manager"
-import { createModelFallbackControllerAccessor } from "./hooks/model-fallback"
-import { initTaskToastManager } from "./features/task-toast-manager"
 import { TmuxSessionManager } from "./features/tmux-subagent"
+import { TuiStateMirror } from "./features/tui-sidebar/mirror-manager"
+import {
+  createModelFallbackControllerAccessor,
+  type ModelFallbackControllerAccessor,
+} from "./hooks/model-fallback"
 import * as openclawRuntimeDispatch from "./openclaw/runtime-dispatch"
-import { registerManagerForCleanup } from "./features/background-agent/process-cleanup"
+import type { PluginContext, TmuxConfig } from "./plugin/types"
 import { createConfigHandler } from "./plugin-handlers"
+import type { ModelCacheState } from "./plugin-state"
 import { log } from "./shared"
+import type { LifecycleMemoryCandidateRecorder } from "./shared/lifecycle-memory-candidate"
 import { markServerRunningInProcess } from "./shared/tmux/tmux-utils/server-health"
-import type { ModelFallbackControllerAccessor } from "./hooks/model-fallback"
 
 type CreateManagersDeps = {
   BackgroundManagerClass: typeof BackgroundManager
@@ -63,9 +64,18 @@ export function createManagers(args: {
   modelCacheState: ModelCacheState
   backgroundNotificationHookEnabled: boolean
   runtimeSkillSourceUrl?: string
+  lifecycleMemoryRecorder?: LifecycleMemoryCandidateRecorder
   deps?: Partial<CreateManagersDeps>
 }): Managers {
-  const { ctx, pluginConfig, tmuxConfig, modelCacheState, backgroundNotificationHookEnabled, runtimeSkillSourceUrl } = args
+  const {
+    ctx,
+    pluginConfig,
+    tmuxConfig,
+    modelCacheState,
+    backgroundNotificationHookEnabled,
+    runtimeSkillSourceUrl,
+    lifecycleMemoryRecorder,
+  } = args
   const deps = { ...defaultCreateManagersDeps, ...args.deps }
 
   // Only mark the server as in-process when the SDK actually exposes a
@@ -189,6 +199,7 @@ export function createManagers(args: {
     },
     enableParentSessionNotifications: backgroundNotificationHookEnabled,
     modelFallbackControllerAccessor,
+    lifecycleMemoryRecorder,
   })
 
   if (pluginConfig.tui?.sidebar?.enabled !== false) {

@@ -1,3 +1,4 @@
+import type { LifecycleMemoryFactInput } from "../../shared/lifecycle-memory-candidate"
 import type { FallbackEntry } from "../../shared/model-requirements"
 import type { DelegatedModelConfig } from "../../shared/model-resolution-types"
 import type { SessionPermissionRule } from "../../shared/question-denied-session-permission"
@@ -93,6 +94,9 @@ export interface BackgroundTask {
   /** ID of the currently active attempt */
   currentAttemptID?: string
 
+  /** Supervisor-provided durable memory facts stored for completion-time governance. */
+  memoryCandidates?: LifecycleMemoryFactInput[]
+
   /** Last message count for stability detection */
   lastMsgCount?: number
   /** Number of consecutive polls with stable message count */
@@ -126,6 +130,8 @@ export interface LaunchInput {
   isUnstableAgent?: boolean
   skills?: string[]
   skillContent?: string
+  /** Supervisor-provided durable memory facts accepted at launch for completion-time governance. */
+  memoryCandidates?: LifecycleMemoryFactInput[]
   category?: string
   sessionPermission?: SessionPermissionRule[]
   onSessionCreated?: (sessionId: string) => void | Promise<void>

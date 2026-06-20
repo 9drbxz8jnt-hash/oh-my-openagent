@@ -4,6 +4,7 @@ import {
   createCompactionAutocontinueHandler,
   createSessionCompactingHandler,
 } from "./plugin/session-compacting"
+import type { LifecycleMemoryCandidate } from "./shared/lifecycle-memory-candidate"
 
 describe("experimental.session.compacting handler", () => {
   //#given all three hooks are present
@@ -157,6 +158,35 @@ describe("experimental.session.compacting handler", () => {
 
     expect(output.prompt).toBe("custom compaction prompt")
   })
+
+  it("#given lifecycle memory recording is configured #when compaction runs #then it records a bounded compact candidate without prompt body text", async () => {
+    //#given
+    const candidates: LifecycleMemoryCandidate[] = []
+    const handler = createSessionCompactingHandler(
+      {},
+      {
+        lifecycleMemoryRecorder: {
+          record: async (candidate) => {
+            candidates.push(candidate)
+          },
+        },
+      },
+    )
+    const output = { context: [] as string[], prompt: "RAW COMPACTION PROMPT MUST NOT BE STORED" }
+
+    //#when
+    await handler({ sessionID: "ses_compact_memory" }, output)
+
+    //#then
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toMatchObject({
+      kind: "compact_summary",
+      decisionOwner: "parent_supervisor",
+      sessionID: "ses_compact_memory",
+    })
+    expect(Buffer.byteLength(JSON.stringify(candidates[0]), "utf8")).toBeLessThanOrEqual(1024)
+    expect(JSON.stringify(candidates[0])).not.toContain("RAW COMPACTION PROMPT")
+  })
 })
 
 describe("experimental.compaction.autocontinue handler", () => {
@@ -278,5 +308,34 @@ describe("experimental.compaction.autocontinue handler", () => {
     expect(laterOutput.enabled).toBe(true)
     expect(restoreContextMock).toHaveBeenCalledTimes(2)
     expect(restoreTodosMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("#given lifecycle memory recording is configured #when autocontinue recovery runs #then it records a bounded recovery candidate", async () => {
+    //#given
+    const candidates: LifecycleMemoryCandidate[] = []
+    const handler = createCompactionAutocontinueHandler(
+      {},
+      {
+        lifecycleMemoryRecorder: {
+          record: async (candidate) => {
+            candidates.push(candidate)
+          },
+        },
+      },
+    )
+    const output = { enabled: true }
+
+    //#when
+    await handler({ sessionID: "ses_recovery_memory", agent: "sisyphus" }, output)
+
+    //#then
+    expect(output.enabled).toBe(true)
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toMatchObject({
+      kind: "compact_recovery_summary",
+      decisionOwner: "parent_supervisor",
+      sessionID: "ses_recovery_memory",
+    })
+    expect(Buffer.byteLength(JSON.stringify(candidates[0]), "utf8")).toBeLessThanOrEqual(1024)
   })
 })

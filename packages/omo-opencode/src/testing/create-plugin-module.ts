@@ -9,15 +9,15 @@ import { createTools } from "../create-tools"
 import type { WorkspaceMemoryReader } from "../features/context-injector"
 import { createRuntimeSkillSourceServer, selectRuntimeSecuritySkills } from "../features/opencode-runtime-skills"
 import { initializeOpenClaw } from "../openclaw"
-import { loadPluginConfig } from "../plugin-config"
-import { createPluginDispose } from "../plugin-dispose"
-import { createPluginInterface } from "../plugin-interface"
-import { createModelCacheState } from "../plugin-state"
 import {
   type CompactionAutocontinueHook,
   createCompactionAutocontinueHandler,
   createSessionCompactingHandler,
 } from "../plugin/session-compacting"
+import { loadPluginConfig } from "../plugin-config"
+import { createPluginDispose } from "../plugin-dispose"
+import { createPluginInterface } from "../plugin-interface"
+import { createModelCacheState } from "../plugin-state"
 import { installAgentSortShim, setAgentSortOrder } from "../shared/agent-sort-shim"
 import {
   detectDuplicateOmoPlugin,
@@ -28,6 +28,7 @@ import {
 import { createFirstMessageVariantGate } from "../shared/first-message-variant"
 import { initI18n } from "../shared/i18n"
 import { migrateLegacyWorkspaceDirectory } from "../shared/legacy-workspace-migration"
+import { createLifecycleMemoryCandidateRecorder } from "../shared/lifecycle-memory-candidate"
 import {
   initLiveServerRoute,
   setLiveParentWakeRoutingDisabled,
@@ -192,6 +193,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
     const tmuxConfig = deps.createRuntimeTmuxConfig(pluginConfig)
 
     const modelCacheState = deps.createModelCacheState()
+    const lifecycleMemoryRecorder = createLifecycleMemoryCandidateRecorder({ workspaceRoot: input.directory })
 
     const managers = deps.createManagers({
       ctx: input,
@@ -200,6 +202,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       modelCacheState,
       backgroundNotificationHookEnabled: isHookEnabled("background-notification"),
       runtimeSkillSourceUrl: runtimeSkillSource?.url,
+      lifecycleMemoryRecorder,
     })
 
     const toolsResult = await deps.createTools({
@@ -240,9 +243,9 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
     const pluginHooks: HooksWithRuntimeLifecycle = {
       ...pluginInterface,
 
-      "experimental.session.compacting": createSessionCompactingHandler(hooks),
+      "experimental.session.compacting": createSessionCompactingHandler(hooks, { lifecycleMemoryRecorder }),
 
-      "experimental.compaction.autocontinue": createCompactionAutocontinueHandler(hooks),
+      "experimental.compaction.autocontinue": createCompactionAutocontinueHandler(hooks, { lifecycleMemoryRecorder }),
 
       dispose: async (): Promise<void> => {
         runtimeSkillSource?.stop()

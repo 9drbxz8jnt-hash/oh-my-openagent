@@ -8,7 +8,6 @@ import {
   type PromptAsyncGateResult,
 } from "../../hooks/shared/prompt-async-gate"
 import { isSessionActive as isOpenCodeSessionActive } from "../../hooks/shared/session-idle-settle"
-import { resolveDispatchClient } from "../../shared/live-server-route"
 import {
   createInternalAgentTextPart,
   getAgentToolRestrictions,
@@ -26,6 +25,13 @@ import {
   registerDelegatedChildSessionBootstrap,
 } from "../../shared/delegated-child-session-bootstrap"
 import { resolveMessageEventSessionID, resolveSessionEventID } from "../../shared/event-session-id"
+import {
+  buildBackgroundTaskCompletionMemoryCandidate,
+  createLifecycleMemoryCandidateRecorder,
+  type LifecycleMemoryCandidateRecorder,
+  normalizeLifecycleMemoryFactInputs,
+} from "../../shared/lifecycle-memory-candidate"
+import { resolveDispatchClient } from "../../shared/live-server-route"
 import {
   hasMoreFallbacks,
   shouldRetryError,
@@ -62,6 +68,7 @@ import {
   TASK_TTL_MS,
 } from "./constants"
 import { formatDuration } from "./duration-formatter"
+import { isEmptyNoProgressAssistantTurnInfo } from "./empty-assistant-turn"
 import {
   extractErrorMessage,
   extractErrorName,
@@ -70,17 +77,16 @@ import {
   isAbortedSessionError,
   isRecord,
 } from "./error-classifier"
-import { isEmptyNoProgressAssistantTurnInfo } from "./empty-assistant-turn"
 import { tryFallbackRetry } from "./fallback-retry-handler"
-import { messageUpdatedInfoHasParentWakeOutput } from "./message-updated-parent-wake-output"
 import {
   type CircuitBreakerSettings,
   detectRepetitiveToolUse,
   recordToolCall,
   resolveCircuitBreakerSettings,
 } from "./loop-detector"
-import { ParentWakeNotifier, type ParentWakePromptContext } from "./parent-wake-notifier"
+import { messageUpdatedInfoHasParentWakeOutput } from "./message-updated-parent-wake-output"
 import type { PendingParentWake } from "./parent-wake-dedupe"
+import { ParentWakeNotifier, type ParentWakePromptContext } from "./parent-wake-notifier"
 import { registerManagerForCleanup, unregisterManagerForCleanup } from "./process-cleanup"
 import { removeTaskToastTracking } from "./remove-task-toast-tracking"
 import {
@@ -88,6 +94,7 @@ import {
   verifySessionExists as verifySessionStillExists,
 } from "./session-existence"
 import { handleSessionIdleBackgroundEvent } from "./session-idle-event-handler"
+import { isActiveSessionStatus, isTerminalSessionStatus } from "./session-status-classifier"
 import {
   hasOutputSignalFromPart,
   isInternalInitiatorTextPart,
@@ -96,7 +103,6 @@ import {
   resolveSessionNextPartInfo,
   SESSION_NEXT_EVENT_PREFIX,
 } from "./session-stream-activity"
-import { isActiveSessionStatus, isTerminalSessionStatus } from "./session-status-classifier"
 import { buildFallbackBody, FALLBACK_AGENT, isAgentNotFoundError } from "./spawner"
 import {
   createSubagentDepthLimitError,
@@ -106,13 +112,13 @@ import {
 } from "./subagent-spawn-limits"
 import { TaskHistory } from "./task-history"
 import { checkAndInterruptStaleTasks, pruneStaleTasksAndNotifications, type SessionStatusMap } from "./task-poller"
-import { toBackgroundTaskSnapshots } from "./task-snapshot"
 import {
   archiveBackgroundTask,
   forgetBackgroundTask,
   getRegisteredBackgroundTask,
   rememberBackgroundTask,
 } from "./task-registry"
+import { toBackgroundTaskSnapshots } from "./task-snapshot"
 import type {
   BackgroundTask,
   BackgroundTaskAttempt,
@@ -238,6 +244,7 @@ export interface BackgroundManagerConfig {
   onShutdown?: () => void | Promise<void>
   enableParentSessionNotifications?: boolean
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
+  lifecycleMemoryRecorder?: LifecycleMemoryCandidateRecorder
   log?: typeof log
 }
 
@@ -277,6 +284,7 @@ export class BackgroundManager {
   private enableParentSessionNotifications: boolean
   private modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   private logger: typeof log
+  private lifecycleMemoryRecorder: LifecycleMemoryCandidateRecorder
   private loggedSessionStatusUnavailable = false
   readonly taskHistory = new TaskHistory()
   private cachedCircuitBreakerSettings?: CircuitBreakerSettings
@@ -301,6 +309,8 @@ export class BackgroundManager {
     this.enableParentSessionNotifications = options?.enableParentSessionNotifications ?? true
     this.modelFallbackControllerAccessor = options?.modelFallbackControllerAccessor
     this.logger = options?.log ?? log
+    this.lifecycleMemoryRecorder = options?.lifecycleMemoryRecorder
+      ?? createLifecycleMemoryCandidateRecorder({ workspaceRoot: this.directory, log: this.logger })
     this.parentWakeNotifier = new ParentWakeNotifier(
       {
         client: this.client,
@@ -600,6 +610,7 @@ export class BackgroundManager {
         model: input.model,
         fallbackChain: input.fallbackChain,
         skillContent: input.skillContent,
+        memoryCandidates: normalizeLifecycleMemoryFactInputs(input.memoryCandidates),
         sessionPermission: input.sessionPermission,
         attemptCount: 0,
         category: input.category,
@@ -2542,6 +2553,8 @@ The task was re-queued on a fallback model after a retryable failure.
       }
       this.taskHistory.record(task.parentSessionId, { id: task.id, sessionID: task.sessionId, agent: task.agent, description: task.description, status: "completed", category: task.category, startedAt: task.startedAt, completedAt: task.completedAt })
 
+      await this.recordTaskCompletionMemoryCandidate(task, source)
+
       if (task.rootSessionId) {
         this.unregisterRootDescendant(task.rootSessionId)
       }
@@ -2597,6 +2610,25 @@ The task was re-queued on a fallback model after a retryable failure.
       if (notificationParentSessionID) {
         this.parentWakeNotifier.releaseNotificationPreparation(notificationParentSessionID)
       }
+    }
+  }
+
+  private async recordTaskCompletionMemoryCandidate(task: BackgroundTask, source: string): Promise<void> {
+    const candidate = buildBackgroundTaskCompletionMemoryCandidate({
+      task,
+      completionSource: source,
+    })
+
+    try {
+      await this.lifecycleMemoryRecorder.record(candidate)
+    } catch (error) {
+      log("[background-agent] lifecycle memory candidate recording failed", {
+        taskId: task.id,
+        sessionID: task.sessionId,
+        parentSessionID: task.parentSessionId,
+        correlationId: candidate.correlationId,
+        error: error instanceof Error ? error.message : String(error),
+      })
     }
   }
 
