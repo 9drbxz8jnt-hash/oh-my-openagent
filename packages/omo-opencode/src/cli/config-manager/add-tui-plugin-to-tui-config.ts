@@ -13,6 +13,7 @@ import {
   parseJsonc,
 } from "../../shared"
 import { writeFileAtomically } from "../../shared/write-file-atomically"
+import { resolveFilePluginCompiledEntry } from "./resolve-file-plugin-compiled-entry"
 
 type ConfigShape = {
   plugin?: string[]
@@ -60,9 +61,13 @@ function desiredTuiEntry(serverEntry: string): string | null {
     return serverEntry
   }
   if (serverEntry.startsWith("file:") && isOurFilePluginEntry(serverEntry)) {
-    return serverEntry
+    return resolveFilePluginCompiledEntry(serverEntry) ? serverEntry : null
   }
   return null
+}
+
+function isUncompiledFilePluginEntry(serverEntry: string): boolean {
+  return serverEntry.startsWith("file:") && isOurFilePluginEntry(serverEntry)
 }
 
 function readTuiConfig(tuiJsonPath: string): { config: ConfigShape; malformed: boolean } {
@@ -87,7 +92,10 @@ export function ensureTuiPluginEntry(opts: { configDir?: string } = {}): EnsureT
 
   const desiredEntry = desiredTuiEntry(serverEntry)
   if (!desiredEntry) {
-    return { changed: false, reason: "no-server-entry" }
+    return {
+      changed: false,
+      reason: isUncompiledFilePluginEntry(serverEntry) ? "file-entry-not-compiled" : "no-server-entry",
+    }
   }
 
   const tuiJsonPath = join(configDir, "tui.json")
