@@ -22,10 +22,23 @@ function readTuiPlugins(dir: string): string[] {
   return JSON.parse(readFileSync(join(dir, "tui.json"), "utf-8")).plugin
 }
 
-function writeFilePackage(dir: string, name = PLUGIN_NAME): string {
+function writeCompiledFilePackage(dir: string, name = PLUGIN_NAME): string {
   const packageDir = join(dir, "package")
-  mkdirSync(packageDir, { recursive: true })
+  const distDir = join(packageDir, "dist")
+  mkdirSync(distDir, { recursive: true })
   writeConfig(packageDir, "package.json", { name, exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" } })
+  writeFileSync(join(distDir, "index.js"), "export default {}\n", "utf-8")
+  writeFileSync(join(distDir, "tui.js"), "export default {}\n", "utf-8")
+  return `file:${packageDir}`
+}
+
+function writeSourceFilePackage(dir: string, name = PLUGIN_NAME): string {
+  const packageDir = join(dir, "source-package")
+  const srcDir = join(packageDir, "src")
+  mkdirSync(srcDir, { recursive: true })
+  writeConfig(packageDir, "package.json", { name, exports: { ".": "./src/index.ts", "./tui": "./src/tui.ts" } })
+  writeFileSync(join(srcDir, "index.ts"), "export default {}\n", "utf-8")
+  writeFileSync(join(srcDir, "tui.ts"), "export default {}\n", "utf-8")
   return `file:${packageDir}`
 }
 
@@ -66,10 +79,10 @@ describe("ensureTuiPluginEntry", () => {
     expect(readTuiPlugins(dir)).toEqual([`${PLUGIN_NAME}@4.9.2`])
   })
 
-  it("#given file server entry and stale named TUI entry #when ensuring #then it adds the matching file entry", () => {
+  it("#given built file server entry and stale named TUI entry #when ensuring #then it preserves the matching dir-form file entry", () => {
     // given
     const dir = tempConfigDir()
-    const fileEntry = writeFilePackage(dir)
+    const fileEntry = writeCompiledFilePackage(dir)
     writeConfig(dir, "opencode.json", { plugin: [fileEntry] })
     writeConfig(dir, "tui.json", { plugin: [`${PLUGIN_NAME}/tui`] })
 
@@ -81,6 +94,20 @@ describe("ensureTuiPluginEntry", () => {
     expect(first).toEqual({ changed: true, reason: "added" })
     expect(second).toEqual({ changed: false, reason: "already-present" })
     expect(readTuiPlugins(dir)).toEqual([fileEntry])
+  })
+
+  it("#given source file server entry #when ensuring #then it skips with file-entry-not-compiled", () => {
+    // given
+    const dir = tempConfigDir()
+    const fileEntry = writeSourceFilePackage(dir)
+    writeConfig(dir, "opencode.json", { plugin: [fileEntry] })
+
+    // when
+    const result = ensureTuiPluginEntry({ configDir: dir })
+
+    // then
+    expect(result).toEqual({ changed: false, reason: "file-entry-not-compiled" })
+    expect(existsSync(join(dir, "tui.json"))).toBe(false)
   })
 
   it("#given legacy server entry #when legacy TUI entry already exists #then it does not duplicate", () => {
